@@ -105,6 +105,7 @@ class Commitments {
 
     private List<Proposition> extract(CaseFile.Passage passage) {
         var scope = SourceAnalysisContext.withContextId(CONTEXT)
+                // The agreement uses grounded claims and source IDs. Mentions stay unresolved.
                 .withEntityResolver((suggestions, schema) -> new Resolutions<>(suggestions.getChunkIds(), List.of()))
                 .withSchema(SCHEMA)
                 .withSourceLocator(new ConnectorRef("customer-commitments", passage.id()));
