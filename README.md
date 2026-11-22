@@ -28,7 +28,7 @@ Use Java 21.
 java -jar target/dice-customer-commitments.jar
 ```
 
-Open [Customer Commitments](http://127.0.0.1:8082). The app runs on loopback, stores the illustrative agreement in `data/customer-commitments.sqlite`, and uses recorded extraction replies. It needs no model credentials. Set `COMMITMENTS_PORT` to change the port or `COMMITMENTS_DB` to point at a fresh SQLite file for another walkthrough.
+Open [Customer Commitments](http://127.0.0.1:8082). The app runs on loopback, stores the illustrative agreement in `data/customer-commitments.sqlite`, and uses recorded extraction replies. It needs no model credentials. Set `COMMITMENTS_PORT` to change the port. Set `COMMITMENTS_DB` or `--commitments.db=/path/to/agreements.sqlite` to choose the SQLite file. Use the same file to resume the agreement after restart.
 
 ## Walk through one agreement
 
@@ -47,6 +47,13 @@ Open [Customer Commitments](http://127.0.0.1:8082). The app runs on loopback, st
 `CommitmentStore.java` uses a complete transaction-time baseline, exact-context reads, and DICE’s audited proposition repository with the Drivine SQLite store. The initial source register is immutable. Replay joins tracked proposition IDs back to that register for citations. A request outside the recorded audit horizon returns HTTP 422. The demo uses a fixed scenario clock so the same evidence produces the same walkthrough.
 
 The bot supports three case questions. It answers from the propositions in the chosen view and returns the same snapshot with their citation IDs. A bot answer and its evidence stay aligned if another tab imports the amendment. It tells the user which questions it supports when the request falls outside that set.
+
+## Adapting the example
+
+- **Use the SQLite starter for durable state.** [StoreConfiguration](src/main/java/example/dice/commitments/StoreConfiguration.java) uses Drivine’s typed connection settings to prepare the database directory before the pool starts. The starter supplies the proposition repository and persistence manager. Register `AuditLogSchema` for that datasource and give `DrivineAuditLogStore` the same manager and Spring transaction manager.
+- **Keep extraction outside the write transaction.** [CommitmentStore](src/main/java/example/dice/commitments/CommitmentStore.java) checks initialization again inside `audit.duringWrite` before it installs a complete baseline. Amendment import rechecks the stored facts inside the same boundary. Superseding the original, saving its replacement, and recording the audit history commit together.
+- **Scope every agreement read.** Build the current read from the agreement the caller can access. Open historical views through `beliefSetAsOf` and surface incomplete coverage. Keep source revisions available so citations can resolve to the exact passage used for extraction.
+- **Supply your own business policy.** [Commitments](src/main/java/example/dice/commitments/Commitments.java) decides which signed source can revise which obligation. The fixture uses a fixed clock, recorded model answers, and an immutable source register. Use real receipt times, source access checks, and versioned source records when accepting live documents.
 
 ## Verify
 

@@ -80,6 +80,7 @@ class CommitmentsTest {
             assertThat(unsupported.path("supported").asBoolean()).isFalse();
             assertThat(unsupported.path("citations").isEmpty()).isTrue();
             request(app, CASE + "/amendment", "POST", 200);
+            assertThat(directory.resolve("agreements/commitments.sqlite")).isRegularFile();
             assertThat(request(app, CASE + "/amendment", "POST", 200).path("claims").size()).isEqualTo(7);
         }
 
@@ -126,7 +127,7 @@ class CommitmentsTest {
 
     private ConfigurableApplicationContext start() {
         return new SpringApplicationBuilder(Application.class)
-                .run("--server.port=0", "--commitments.db=" + directory.resolve("commitments.sqlite"),
+                .run("--server.port=0", "--commitments.db=" + directory.resolve("agreements/commitments.sqlite"),
                         "--spring.main.banner-mode=off", "--logging.level.root=WARN");
     }
 
