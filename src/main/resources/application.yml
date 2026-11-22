@@ -1,0 +1,31 @@
+server:
+  address: 127.0.0.1
+  port: ${COMMITMENTS_PORT:8082}
+
+spring:
+  application:
+    name: dice-customer-commitments
+  ai:
+    model:
+      chat: none
+      embedding: none
+
+database:
+  datasources:
+    local:
+      type: SQLITE
+      database-name: ${commitments.db:${COMMITMENTS_DB:./data/customer-commitments.sqlite}}
+
+embabel:
+  models:
+    default-embedding-model: demo-embeddings
+    default-llm: recorded-extraction
+  dice:
+    store:
+      datasource: local
+      decay:
+        enabled: false
+
+logging:
+  level:
+    org.drivine.logger.StatementLogger: "OFF"

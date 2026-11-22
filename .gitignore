@@ -1,0 +1,7 @@
+/target/
+/data/
+/node_modules/
+/playwright-report/
+/test-results/
+/.impeccable/
+.DS_Store
