@@ -118,7 +118,7 @@ async function run(operation) {
   }
 }
 
-async function showAnswer(question) {
+async function showAnswer(question, { clearDraft = false } = {}) {
   const text = question.trim()
   if (!text) return
   await run(async () => {
@@ -139,7 +139,7 @@ async function showAnswer(question) {
           '<button type="button" class="citation" data-source="' + html(source.id)
             + '" aria-label="Open citation for ' + html(subjects.join(' and ')) + '">'
             + html(label) + '</button>').join('') + '</div>')
-      page.question.value = ''
+      if (clearDraft && page.question.value === question) page.question.value = ''
     } catch (error) {
       page.answer.replaceChildren()
       page.askError.textContent = error.message
@@ -182,7 +182,7 @@ page.amendment.addEventListener('click', () => run(async () => {
 }))
 page.form.addEventListener('submit', (event) => {
   event.preventDefault()
-  showAnswer(page.question.value)
+  showAnswer(page.question.value, { clearDraft: true })
 })
 document.addEventListener('click', (event) => {
   const suggestion = event.target.closest('[data-question]')

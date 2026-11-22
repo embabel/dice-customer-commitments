@@ -92,6 +92,34 @@ test('keeps a failed question and recovery beside the mobile composer', async ({
   await expect(question).toHaveValue('')
 })
 
+test('keeps a new draft through a delayed answer and a suggested question', async ({ page }) => {
+  await page.goto('/')
+  const question = page.getByRole('textbox', { name: 'Ask about the agreement' })
+  const ask = page.getByRole('button', { name: 'Ask', exact: true })
+  let releaseResponse
+  const holdResponse = new Promise((resolve) => { releaseResponse = resolve })
+  await page.route('**/api/commitments/ask', async (route) => {
+    const response = await route.fetch()
+    await holdResponse
+    await route.fulfill({ response })
+  })
+
+  await question.fill('What did we promise?')
+  await ask.click()
+  await expect(page.locator('#answer')).toContainText('Looking up the agreement')
+  await question.fill('What changed?')
+  releaseResponse()
+  await expect(page.locator('#answer')).toContainText('Rivet Systems promised')
+  await expect(question).toHaveValue('What changed?')
+
+  await page.getByRole('button', { name: 'What’s open?' }).click()
+  await expect(page.locator('#answer')).toContainText('Maya promised')
+  await expect(question).toHaveValue('What changed?')
+  await ask.click()
+  await expect(page.locator('#answer .answer-question')).toHaveText('What changed?')
+  await expect(question).toHaveValue('')
+})
+
 async function capture(page, name) {
   const directory = process.env.COMMITMENTS_ARTIFACTS
   if (directory) {
