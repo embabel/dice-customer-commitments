@@ -4,6 +4,21 @@ A customer asks to move a depot migration forward. Sales mentioned an earlier ta
 
 Customer Commitments turns the original passages into DICE propositions. Ask the bot what was promised, follow its citations, and replay the answers from the opening agreement. The bot can also separate Maya’s spoken runbook commitment from the reminder her personal assistant recorded.
 
+## What you’ll see
+
+After you import the signed amendment, ask **What changed?** The bot shows that migration moved from 25 November to 2 December and the security checklist kept its 20 November deadline. Open a citation to read the signed passage beside the answer.
+
+![Commitments bot showing the revised migration date beside the signed amendment](https://github.com/embabel/dice-customer-commitments/releases/download/readme-screenshots/amendment-desktop.png)
+
+Select **Opening record** to return to the original agreement. The source panel can also show the assistant handoff behind the runbook promise and the Saturday cutover reminder.
+
+<details>
+<summary>Mobile view</summary>
+
+![Mobile opening record showing the original signed dates and the handoff citation](https://github.com/embabel/dice-customer-commitments/releases/download/readme-screenshots/opening-record-mobile.png)
+
+</details>
+
 ## Run the demo
 
 Use Java 21.
