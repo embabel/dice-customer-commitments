@@ -2,10 +2,9 @@ package example.dice.commitments;
 
 import com.embabel.agent.api.common.Ai;
 import com.embabel.agent.core.DataDictionary;
-import com.embabel.agent.rag.service.support.InMemoryNamedEntityDataRepository;
 import com.embabel.common.ai.model.LlmOptions;
+import com.embabel.dice.common.Resolutions;
 import com.embabel.dice.common.SourceAnalysisContext;
-import com.embabel.dice.common.resolver.EscalatingEntityResolver;
 import com.embabel.dice.pipeline.ChunkPropositionResult;
 import com.embabel.dice.pipeline.PropositionPipeline;
 import com.embabel.dice.proposition.Proposition;
@@ -106,7 +105,8 @@ class Commitments {
 
     private List<Proposition> extract(CaseFile.Passage passage) {
         var scope = SourceAnalysisContext.withContextId(CONTEXT)
-                .withEntityResolver(EscalatingEntityResolver.withoutVector(new InMemoryNamedEntityDataRepository(SCHEMA)))
+                // The agreement uses grounded claims and source IDs. Mentions stay unresolved.
+                .withEntityResolver((suggestions, schema) -> new Resolutions<>(suggestions.getChunkIds(), List.of()))
                 .withSchema(SCHEMA)
                 .withSourceLocator(new ConnectorRef("customer-commitments", passage.id()));
         var result = extraction.processText(passage.passage(), passage.id(), scope);

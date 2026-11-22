@@ -10,7 +10,8 @@ import com.embabel.dice.storage.DiceStorageSchema;
 import com.embabel.dice.storage.DiceStorageSchemaKt;
 import com.embabel.dice.storage.DrivineAuditLogStore;
 import com.embabel.dice.storage.DrivinePropositionRepository;
-import org.drivine.manager.PersistenceManagerFactory;
+import org.drivine.connection.ConnectionProperties;
+import org.drivine.manager.PersistenceManager;
 import org.drivine.schema.SchemaCatalog;
 import org.drivine.schema.UniquenessConstraintSpec;
 import org.springframework.ai.document.Document;
@@ -20,6 +21,7 @@ import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -44,7 +46,11 @@ class StoreConfiguration {
     @Bean
     static BeanFactoryPostProcessor createStorageDirectory(Environment environment) {
         return factory -> {
-            var file = Path.of(environment.getRequiredProperty("database.datasources.local.database-name"));
+            // The pool needs the directory before Spring creates the datasource beans.
+            var connection = Binder.get(environment)
+                    .bind("database.datasources." + DATABASE, ConnectionProperties.class)
+                    .orElseThrow(() -> new IllegalStateException("Missing SQLite datasource " + DATABASE));
+            var file = Path.of(connection.getDatabaseName());
             try {
                 Files.createDirectories(file.toAbsolutePath().getParent());
             } catch (IOException failure) {
@@ -70,15 +76,18 @@ class StoreConfiguration {
     }
 
     @Bean
-    CommitmentStore commitmentStore(PropositionRepository raw, PersistenceManagerFactory factory,
-                              PlatformTransactionManager transactionManager) {
+    DrivineAuditLogStore auditLog(PersistenceManager manager, PlatformTransactionManager transactions) {
+        // The fixture records one correction at the known receipt time.
+        return new DrivineAuditLogStore(manager, transactions, Clock.fixed(AMENDMENT, ZoneOffset.UTC));
+    }
+
+    @Bean
+    CommitmentStore commitmentStore(PropositionRepository raw, DrivineAuditLogStore audit,
+                                    PersistenceManager manager) {
         if (!(raw instanceof DrivinePropositionRepository repository)) {
             throw new IllegalStateException("Customer Commitments requires the DICE SQLite store");
         }
-        var manager = factory.get(DATABASE);
-        // The fixture records one correction at the known receipt time. Replay stays deterministic.
-        var clock = Clock.fixed(AMENDMENT, ZoneOffset.UTC);
-        return new CommitmentStore(repository, new DrivineAuditLogStore(manager, transactionManager, clock), manager);
+        return new CommitmentStore(repository, audit, manager);
     }
 
     @Bean
