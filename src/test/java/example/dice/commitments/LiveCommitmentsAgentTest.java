@@ -19,10 +19,12 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,11 +33,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * R1: A conversation ends with a user question and has only user and assistant turns.
  * E1: A real agent run passes the selected evidence and ordered prior turns to the configured model.
  * E2: A model response with an invented citation fails outside the model boundary.
+ * E3: Multiple claims from the same passage share one full copy of it in the prompt.
  * I1: When there is no selected evidence, or the model cites none, the answer abstains.
+ * I2: Oversized evidence or conversation is refused before model use.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LiveCommitmentsAgentTest {
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final String EVIDENCE_PREFIX = "DICE_EVIDENCE_JSON: ";
     private static final Instant EARLIER = Instant.parse("2026-11-09T10:00:00Z");
     private static final String EARLIER_ID = "signed-agreement-first";
     private static final LiveCommitmentsAgent.EvidenceView EARLIER_VIEW =
@@ -140,6 +146,66 @@ class LiveCommitmentsAgentTest {
         var empty = agent.answer(question(), new LiveCommitmentsAgent.EvidenceView(EARLIER, true, List.of()));
         assertThat(empty).isEqualTo(unsupported);
         assertThat(model.prompt).isNull();
+    }
+
+    @Test
+    void e3SendsOneFullPassageForAllClaimsFromThatPassage() {
+        var passage = "Rivet will migrate the accounts on November 25. Tandem will deliver the security checklist.";
+        var otherPassage = "The customer asked if the migration could move forward.";
+        model.respondWith("""
+                {"text":"Rivet agreed to migrate the accounts.", "citationIds":["migration"]}
+                """);
+
+        var evidence = List.of(
+                evidence("migration", "Rivet agreed to migrate the accounts.", "Opening agreement", passage),
+                evidence("checklist", "Tandem agreed to deliver the security checklist.", "Opening agreement", passage),
+                evidence("request", "The customer asked about moving the date forward.", "Email", otherPassage));
+        var answer = agent.answer(question(), new LiveCommitmentsAgent.EvidenceView(EARLIER, true, evidence));
+
+        var evidenceMessage = model.prompt.getInstructions().stream()
+                .map(Message::getText).filter(text -> text.startsWith(EVIDENCE_PREFIX)).findFirst().orElseThrow();
+        var payload = JSON.readTree(evidenceMessage.substring(EVIDENCE_PREFIX.length()));
+        var claims = payload.path("evidence");
+        assertThat(claims).hasSize(3);
+        assertThat(claims.get(0).path("id").asString()).isEqualTo("migration");
+        assertThat(claims.get(0).path("sourceTitle").asString()).isEqualTo("Opening agreement");
+        assertThat(claims).noneMatch(claim -> claim.has("sourceText"));
+        var firstRef = claims.get(0).path("sourceRef").asString();
+        var secondRef = claims.get(2).path("sourceRef").asString();
+        assertThat(claims.get(1).path("sourceRef").asString()).isEqualTo(firstRef);
+        assertThat(secondRef).isNotEqualTo(firstRef);
+        var sourcePassages = payload.path("sources");
+        assertThat(sourcePassages.size()).isEqualTo(2);
+        assertThat(sourcePassages.path(firstRef).asString()).isEqualTo(passage);
+        assertThat(sourcePassages.path(secondRef).asString()).isEqualTo(otherPassage);
+        assertThat(answer.citationIds()).containsExactly("migration");
+    }
+
+    @Test
+    void i2AbstainsBeforeCallingTheProviderIfEvidenceOrConversationExceedsTheBudget() {
+        model.respondWith("""
+                {"text":"This answer should never be generated.", "citationIds":["claim-0"]}
+                """);
+        var evidence = IntStream.range(0, 5)
+                .mapToObj(index -> evidence("claim-" + index, "A signed claim.", "Source " + index,
+                        "Source " + index + " " + "a".repeat(14_000))).toList();
+
+        var oversizedEvidence = agent.answer(question(), new LiveCommitmentsAgent.EvidenceView(EARLIER, true, evidence));
+        assertThat(oversizedEvidence.text()).contains("earlier agreement checkpoint", "shorter conversation");
+        assertThat(oversizedEvidence.citationIds()).isEmpty();
+        assertThat(model.prompt).isNull();
+
+        model.respondWith("""
+                {"text":"This answer should never be generated.", "citationIds":["signed-agreement-first"]}
+                """);
+        var oversizedConversation = agent.answer(List.of(new LiveCommitmentsAgent.Turn("user", "a".repeat(64_000))),
+                EARLIER_VIEW);
+        assertThat(oversizedConversation).isEqualTo(oversizedEvidence);
+        assertThat(model.prompt).isNull();
+    }
+
+    private static LiveCommitmentsAgent.Evidence evidence(String id, String text, String title, String passage) {
+        return new LiveCommitmentsAgent.Evidence(id, text, "COMMITMENT", "ACTIVE", "AGREED", title, passage);
     }
 
     private static List<LiveCommitmentsAgent.Turn> question() {
