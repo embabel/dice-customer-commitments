@@ -29,8 +29,10 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -98,15 +100,16 @@ final class LiveCaseStore {
             throw new IllegalArgumentException("Supply a title, document text, and a supported source kind.");
         }
         var sourceId = LiveCase.sourceId(upload);
-        var prepared = List.copyOf(candidates);
-        if (prepared.isEmpty() || prepared.stream().anyMatch(candidate -> !isGrounded(candidate, sourceId))) {
+        var supplied = List.copyOf(candidates);
+        if (supplied.isEmpty() || supplied.stream().anyMatch(candidate -> !isGrounded(candidate, sourceId))) {
             throw new IllegalArgumentException("Every claim must be grounded in the submitted source.");
         }
+        var prepared = uniqueAssessments(supplied);
         return audit.duringWrite(CONTEXT, () -> {
             var checkpoint = checkpoint();
             var existing = receipt(sourceId);
             if (existing.isPresent()) {
-                return intake(currentSnapshot(checkpoint), existing.get().claimIds());
+                return intake(currentSnapshot(checkpoint), existing.get());
             }
             var facts = current();
             var predecessor = eligiblePredecessor(upload, prepared, facts);
@@ -127,6 +130,15 @@ final class LiveCaseStore {
                 && candidate.provider() != null && !candidate.provider().isBlank();
     }
 
+    private static List<LiveCase.Candidate> uniqueAssessments(List<LiveCase.Candidate> candidates) {
+        var assessments = new LinkedHashMap<AssessmentKey, LiveCase.Candidate>();
+        for (var candidate : candidates) {
+            var key = new AssessmentKey(candidate.proposition().getText(), candidate.classification(), candidate.provider());
+            assessments.putIfAbsent(key, candidate);
+        }
+        return List.copyOf(assessments.values());
+    }
+
     private Proposition eligiblePredecessor(LiveCase.Upload upload, List<LiveCase.Candidate> candidates,
                                             List<Proposition> facts) {
         if (!upload.signedAttested() || !"SIGNED_AMENDMENT".equals(upload.kind()) || upload.replacesClaimId() == null
@@ -145,14 +157,20 @@ final class LiveCaseStore {
 
     private LiveCase.Intake write(LiveCase.Source source, LiveCase.Upload upload, List<LiveCase.Candidate> candidates,
                                   Proposition predecessor, int currentSize, Checkpoint checkpoint) {
-        var ids = new LinkedHashSet<String>();
+        var classifications = new HashMap<String, Set<String>>();
+        for (var candidate : candidates) {
+            classifications.computeIfAbsent(candidate.proposition().getText(), text -> new HashSet<>())
+                    .add(candidate.classification());
+        }
+        var observations = new ArrayList<Observation>();
         for (int index = 0; index < candidates.size(); index++) {
             var candidate = candidates.get(index);
             var id = source.id() + ":" + index;
             var classification = candidate.classification();
+            var conflicting = classifications.get(candidate.proposition().getText()).size() > 1;
             var draft = candidate.proposition().toDraft().withId(id).withStatus(PropositionStatus.ACTIVE)
                     .withTemporal(null);
-            var replacement = "AMENDMENT".equals(classification) && predecessor != null
+            var replacement = !conflicting && "AMENDMENT".equals(classification) && predecessor != null
                     && !predecessor.getText().equals(candidate.proposition().getText());
             if (replacement) {
                 draft = draft.withTemporal(new TemporalMetadata(null, null, null, null, List.of(predecessor.getId())));
@@ -162,23 +180,25 @@ final class LiveCaseStore {
                 throw new IllegalStateException("This workspace has reached its claim limit.");
             }
             var saved = audited.save(proposition);
-            ids.add(saved.getId());
-            if (!saved.getId().equals(id)) {
-                // An identical proposition can resolve to an earlier claim. Its authority and citation stay as recorded.
+            var duplicate = !saved.getId().equals(id);
+            var proposed = decision(upload, candidate, replacement ? predecessor.getId() : null);
+            var applied = outcome(upload, conflicting, duplicate, proposed);
+            observations.add(new Observation(saved.getId(), classification, candidate.provider(), applied));
+            if (duplicate) {
+                // The receipt describes this source. The canonical claim keeps its original authority and citation.
                 continue;
             }
             currentSize++;
-            var decision = decision(upload, candidate, replacement ? predecessor.getId() : null);
             manager.execute(query("""
                     CREATE (:LiveCommitmentsEvidence {id: $id, contextId: $scope, payload: $payload})
                     """, id, json.writeValueAsString(new Evidence(source.id(), classification, candidate.provider(),
-                    decision.outcome(), decision.reason(), decision.replacesClaimId()))));
+                    applied.outcome(), applied.reason(), applied.replacesClaimId()))));
             if (replacement) {
                 audited.save(predecessor.withStatus(PropositionStatus.SUPERSEDED));
             }
         }
 
-        var receipt = new Receipt(source, List.copyOf(ids));
+        var receipt = new Receipt(source, List.copyOf(observations));
         var updated = new Checkpoint(checkpoint.baseline(), source.receivedAt());
         manager.execute(query("""
                 CREATE (:LiveCommitmentsReceipt {id: $id, contextId: $scope, payload: $payload})
@@ -187,7 +207,25 @@ final class LiveCaseStore {
                 MATCH (c:LiveCommitmentsCheckpoint {id: $id})
                 SET c.payload = $payload
                 """, CONTEXT, json.writeValueAsString(updated)));
-        return intake(currentSnapshot(updated), receipt.claimIds());
+        return intake(currentSnapshot(updated), receipt);
+    }
+
+    private static Decision outcome(LiveCase.Upload upload, boolean conflicting, boolean duplicate, Decision proposed) {
+        if (conflicting) {
+            return new Decision("REVIEW_NEEDED", "The model assigned conflicting classifications to this claim.", null);
+        }
+        if (!duplicate) {
+            return proposed;
+        }
+        var signedSource = "SIGNED_AGREEMENT".equals(upload.kind()) || "SIGNED_AMENDMENT".equals(upload.kind());
+        if (signedSource || !"RECORDED".equals(proposed.outcome())) {
+            return new Decision("REVIEW_NEEDED",
+                    "This assessment matches an existing claim. The submitted source was recorded for review and the agreement stayed as recorded.",
+                    null);
+        }
+        return new Decision("RECORDED",
+                "This assessment matches an existing claim. The submitted source was recorded with the existing claim as its reference.",
+                null);
     }
 
     private static Decision decision(LiveCase.Upload upload, LiveCase.Candidate candidate, String replacementId) {
@@ -206,10 +244,15 @@ final class LiveCaseStore {
         };
     }
 
-    private static LiveCase.Intake intake(LiveCase.Snapshot snapshot, List<String> ids) {
-        var claims = ids.stream()
-                .map(id -> snapshot.claims().stream().filter(claim -> claim.id().equals(id)).findFirst().orElseThrow())
-                .toList();
+    private static LiveCase.Intake intake(LiveCase.Snapshot snapshot, Receipt receipt) {
+        var canonical = new HashMap<String, LiveCase.Claim>();
+        snapshot.claims().forEach(claim -> canonical.put(claim.id(), claim));
+        var claims = receipt.observations().stream().map(observation -> {
+            var claim = canonical.get(observation.id());
+            var decision = observation.decision();
+            return new LiveCase.Claim(claim.id(), claim.text(), observation.classification(), claim.status(), decision.outcome(),
+                    decision.reason(), observation.provider(), decision.replacesClaimId(), receipt.source());
+        }).toList();
         return new LiveCase.Intake(snapshot, claims);
     }
 
@@ -269,7 +312,13 @@ final class LiveCaseStore {
     private record Decision(String outcome, String reason, String replacesClaimId) {
     }
 
-    private record Receipt(LiveCase.Source source, List<String> claimIds) {
+    private record AssessmentKey(String text, String classification, String provider) {
+    }
+
+    private record Observation(String id, String classification, String provider, Decision decision) {
+    }
+
+    private record Receipt(LiveCase.Source source, List<Observation> observations) {
     }
 
     private record Evidence(String sourceId, String classification, String decisionProvider, String outcome,

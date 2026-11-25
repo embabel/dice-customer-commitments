@@ -103,9 +103,18 @@ class LiveCaseStoreTest {
 
             var first = save(store, email, text, "REQUEST");
             var retry = save(store, email, text, "TARGET");
-            var duplicate = save(store, other, text, "REQUEST");
+            var duplicateCandidate = new LiveCase.Candidate(candidate(other, text, "TARGET").proposition(),
+                    "TARGET", "another-decision-model");
+            var duplicate = store.save(other, List.of(duplicateCandidate, duplicateCandidate));
             assertThat(retry).isEqualTo(first);
-            assertThat(duplicate.claims()).isEqualTo(first.claims());
+            assertThat(duplicate.claims()).hasSize(1);
+            var observation = duplicate.claims().getFirst();
+            assertThat(observation.id()).isEqualTo(first.claims().getFirst().id());
+            assertThat(observation.source().text()).isEqualTo(other.text());
+            assertThat(observation.classification()).isEqualTo("TARGET");
+            assertThat(observation.decisionProvider()).isEqualTo("another-decision-model");
+            assertThat(observation.reason()).contains("matches an existing claim");
+            assertThat(duplicate.snapshot().claims()).isEqualTo(first.claims());
             assertThat(duplicate.snapshot().claims()).hasSize(1);
             assertThat(duplicate.snapshot().asOf()).isAfter(first.snapshot().asOf());
             assertThat(store.read(first.snapshot().asOf()).claims()).isEqualTo(first.claims());
@@ -114,6 +123,8 @@ class LiveCaseStoreTest {
 
     @Test
     void E1_doesNotRetireAnAgreementWhenTheAmendmentDeduplicatesToAnEarlierUnsignedClaim() {
+        LiveCase.Upload amendment;
+        LiveCase.Intake duplicate;
         try (var app = start()) {
             var store = app.getBean(LiveCaseStore.class);
             var agreement = new LiveCase.Upload("Signed agreement", "SIGNED_AGREEMENT",
@@ -124,12 +135,39 @@ class LiveCaseStoreTest {
             var email = new LiveCase.Upload("Proposed date", "EMAIL", "Could we make it December 2?", null);
             var proposed = save(store, email, "Migration is due December 2.", "REQUEST").claims().getFirst();
 
-            var amendment = new LiveCase.Upload("Signed extension", "SIGNED_AMENDMENT",
+            amendment = new LiveCase.Upload("Signed extension", "SIGNED_AMENDMENT",
                     "We signed an extension to December 2.", priorId, true);
-            var duplicate = save(store, amendment, proposed.text(), "AMENDMENT");
-            assertThat(duplicate.claims()).containsExactly(proposed);
+            duplicate = save(store, amendment, proposed.text(), "AMENDMENT");
+            var observation = duplicate.claims().getFirst();
+            assertThat(observation.id()).isEqualTo(proposed.id());
+            assertThat(observation.source().text()).isEqualTo(amendment.text());
+            assertThat(observation.classification()).isEqualTo("AMENDMENT");
+            assertThat(observation.outcome()).isEqualTo("REVIEW_NEEDED");
+            assertThat(observation.reason()).contains("matches an existing claim");
+            assertThat(observation.replacesClaimId()).isNull();
+            assertThat(claim(duplicate.snapshot(), proposed.id())).isEqualTo(proposed);
             assertThat(claim(duplicate.snapshot(), priorId).status()).isEqualTo("ACTIVE");
-            assertThat(duplicate.snapshot().claims()).extracting(LiveCase.Claim::outcome).doesNotContain("REVISED");
+        }
+        try (var restarted = start()) {
+            var store = restarted.getBean(LiveCaseStore.class);
+            assertThat(save(store, amendment, duplicate.claims().getFirst().text(), "REQUEST")).isEqualTo(duplicate);
+            assertThat(store.read(duplicate.snapshot().asOf()).claims()).isEqualTo(duplicate.snapshot().claims());
+        }
+    }
+
+    @Test
+    void E1_holdsConflictingAssessmentsOfTheSameClaimInOneReceiptForReview() {
+        try (var app = start()) {
+            var store = app.getBean(LiveCaseStore.class);
+            var signed = new LiveCase.Upload("Signed handoff", "SIGNED_AGREEMENT",
+                    "The parties signed the handoff schedule.", null, true);
+            String text = "The handoff is scheduled for Saturday.";
+            var result = store.save(signed, List.of(
+                    candidate(signed, text, "COMMITMENT"), candidate(signed, text, "REQUEST")));
+            assertThat(result.claims()).extracting(LiveCase.Claim::classification).containsExactly("COMMITMENT", "REQUEST");
+            assertThat(result.claims()).extracting(LiveCase.Claim::outcome).containsOnly("REVIEW_NEEDED");
+            assertThat(result.claims()).extracting(LiveCase.Claim::id).containsOnly(result.snapshot().claims().getFirst().id());
+            assertThat(result.snapshot().claims()).extracting(LiveCase.Claim::outcome).containsExactly("REVIEW_NEEDED");
         }
     }
 
