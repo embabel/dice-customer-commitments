@@ -1,6 +1,6 @@
 # Design
 
-Customer Commitments uses the composition of a working agreement file. The case identity and the time under review occupy the top of the page. Signed obligations sit in a ruled schedule beside the source reader. The question panel looks up the selected record and gives the operator a direct line back to an original passage.
+Customer Commitments uses the composition of a working agreement file. The agreement record stays in view alongside the signed schedule and an evidence reader. A conversation can answer follow-up questions against the selected record. Intake gives the operator a chance to check which obligation a signed amendment replaces before submitting it.
 
 ## Type
 
@@ -8,12 +8,12 @@ Newsreader carries the case name and document headings. Manrope carries controls
 
 ## Color and materials
 
-The paper background and panel stocks separate navigation and evidence from the dark question panel. A single high-visibility citron marks actions. Green, blue, and amber distinguish proposition types where needed. Each state also carries an explicit text label.
+The paper background and panel stocks separate the agreement and evidence from the conversation. Status labels name what happened in text, including the classification and the agreement outcome.
 
 ## Layout and interaction
 
-- The agreement view and amendment action stay visible before the commitments list.
-- Evidence links select a source in the reader and move keyboard focus to that passage.
-- Each bot answer names the selected view and links to its supporting claims.
-- At narrow widths the record and reader stack. Typography, alignment, controls, and source attribution remain the same.
-- Only a selected source transition changes paper tone. Reduced motion removes it.
+- Select the current agreement or a recorded checkpoint before asking a question.
+- Add a source with its type and original text. Signed material has an explicit attestation and an amendment has a commitment selector.
+- Read each claim's application decision and model classification in the agreement.
+- Open a citation to read its source in the evidence panel.
+- At narrow widths the record and conversation stack. Typography, alignment, controls, and source attribution remain the same.

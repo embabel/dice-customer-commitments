@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Java 21 and Spring Boot serve a same-origin HTML, CSS, and JavaScript application. DICE stores propositions and audit records in SQLite. Offline extraction replays recorded model responses.
+Java 21 and Spring Boot serve a same-origin HTML, CSS, and JavaScript application. DICE extracts propositions and stores the agreement and audit history in SQLite. An Embabel agent answers through AG-UI. An Embabel decision provider classifies claims.
 
 ## Users
 
@@ -16,23 +16,23 @@ Customer onboarding and account leads reconstructing an agreed delivery schedule
 
 ## Product Purpose
 
-Help an operator distinguish what each party committed to from dates mentioned as an aspiration or request. The operator can inspect the passages behind the claims, take a signed amendment into account, and recover the opening agreement.
+Help an operator distinguish what each party committed to from dates mentioned as an aspiration or request. The operator can submit unfamiliar source text, examine recorded decisions and evidence, and ask follow-up questions against the current or an earlier agreement record.
 
 ## Positioning
 
-The application starts from a call transcript, email, and signed document excerpts. DICE extracts claims with source provenance. The example applies an explicit agreement rule to the extracted claims and replays the belief set at an earlier transaction time.
+The application uses DICE propositions as the durable record. A decision model classifies extracted claims. An explicit agreement rule controls which claims enter or change the signed schedule. The agent answers from the selected record and supplies evidence links.
 
 ## Operating Context
 
-Tandem Transit needs to migrate its depot accounts. A sales target and a customer request both name dates earlier than the signed schedule. An amendment changes Rivet Systems’ migration date while leaving Tandem’s security outputs due on the original date.
+A customer requests an earlier cutover than the date in the signed onboarding addendum. A later signed amendment changes the migration deadline while leaving the security checklist deadline intact. The account lead needs the current briefing and the evidence for what the team knew before the amendment.
 
 ## Capabilities and Constraints
 
-All documents and parties are synthetic. The recorded model covers the supplied passages. The agreement rule accepts only explicit signed commitments and authorized amendments. The tool displays a readout for an agreement owner. Copying excerpts into the application does not create an agreement.
+The live workbench accepts pasted passages and uses configured model providers. The single local operator attests to reviewing signed material and identifies the obligation an amendment replaces. The recorded walkthrough uses synthetic sources and runs without credentials.
 
 ## Product Principles
 
-- Show the committing party, deliverable, and date in the first view.
-- Let the user inspect the exact source passage.
-- Preserve possibilities and requests beside commitments so the user can tell them apart.
-- Keep historical replay within the captured evidence horizon.
+- Show the signed schedule and the source passages behind it.
+- Keep requests, targets, and reminders visible beside signed commitments.
+- Show the model classification and the application decision as separate facts.
+- Ground each answer and citation in the same agreement record.
