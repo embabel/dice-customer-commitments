@@ -45,6 +45,10 @@ final class LiveIntake {
     LiveCase.Intake ingest(LiveCase.Upload upload) {
         validate(upload);
         var id = sourceId(upload);
+        var previous = store.findIntake(id);
+        if (previous.isPresent()) {
+            return previous.get();
+        }
         var prior = priorClaimText(upload.replacesClaimId());
         var scope = SourceAnalysisContext.withContextId(CONTEXT)
                 .withEntityResolver((suggestions, schema) -> new Resolutions<>(suggestions.getChunkIds(), List.of()))

@@ -4,6 +4,9 @@ import com.embabel.agent.spi.LlmService;
 import com.embabel.agent.spi.support.springai.SpringAiLlmService;
 import com.embabel.dice.audit.AuditCoverageException;
 import com.embabel.dice.proposition.Proposition;
+import org.drivine.manager.PersistenceManager;
+import org.drivine.query.CypherStatement;
+import org.drivine.query.QuerySpecification;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.WebApplicationType;
@@ -11,15 +14,21 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LiveCaseStoreTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     // R1. Every new proposition has grounding in the exact submitted source.
     // E1. Signed authority requires attestation and an explicit active predecessor for a revision.
@@ -151,7 +160,31 @@ class LiveCaseStoreTest {
         try (var restarted = start()) {
             var store = restarted.getBean(LiveCaseStore.class);
             assertThat(save(store, amendment, duplicate.claims().getFirst().text(), "REQUEST")).isEqualTo(duplicate);
-            assertThat(store.read(duplicate.snapshot().asOf()).claims()).isEqualTo(duplicate.snapshot().claims());
+            var current = store.read(null);
+            var selected = store.read(duplicate.snapshot().asOf());
+            var before = store.read(duplicate.snapshot().asOf().minusNanos(1));
+            assertThat(selected.claims()).isEqualTo(duplicate.snapshot().claims());
+
+            JsonNode receipts = JSON.valueToTree(current);
+            JsonNode historical = JSON.valueToTree(selected);
+            JsonNode earlier = JSON.valueToTree(before);
+            assertThat(receipts.path("receipts").size()).isEqualTo(3);
+            assertThat(historical.path("receipts")).isEqualTo(receipts.path("receipts"));
+            assertThat(earlier.path("receipts").size()).isEqualTo(2);
+            var reviewed = historical.path("receipts").get(2);
+            var source = reviewed.path("source");
+            assertThat(source.path("id").asText()).isEqualTo(duplicate.claims().getFirst().source().id());
+            assertThat(source.path("text").asText()).isEqualTo(amendment.text());
+            assertThat(source.path("signedAttested").asBoolean()).isTrue();
+            assertThat(source.path("selectedClaimId").asText()).isEqualTo(amendment.replacesClaimId());
+            var decision = reviewed.path("decisions").get(0);
+            var held = duplicate.claims().getFirst();
+            assertThat(decision.path("claimId").asText()).isEqualTo(held.id());
+            assertThat(decision.path("text").asText()).isEqualTo(held.text());
+            assertThat(decision.path("classification").asText()).isEqualTo("AMENDMENT");
+            assertThat(decision.path("outcome").asText()).isEqualTo("REVIEW_NEEDED");
+            assertThat(decision.path("reason").asText()).contains("matches an existing claim");
+            assertThat(decision.path("provider").asText()).isEqualTo(held.decisionProvider());
         }
     }
 
@@ -168,6 +201,41 @@ class LiveCaseStoreTest {
             assertThat(result.claims()).extracting(LiveCase.Claim::outcome).containsOnly("REVIEW_NEEDED");
             assertThat(result.claims()).extracting(LiveCase.Claim::id).containsOnly(result.snapshot().claims().getFirst().id());
             assertThat(result.snapshot().claims()).extracting(LiveCase.Claim::outcome).containsExactly("REVIEW_NEEDED");
+        }
+    }
+
+    @Test
+    void L1_readsReceiptsWrittenBeforeAttestationAndObservationTextWerePersisted() {
+        var upload = new LiveCase.Upload("Signed schedule", "SIGNED_AGREEMENT", "We signed for Saturday.", null, true);
+        String statement = "The schedule is signed for Saturday.";
+        try (var app = start()) {
+            var store = app.getBean(LiveCaseStore.class);
+            var intake = save(store, upload, statement, "COMMITMENT");
+            var id = intake.claims().getFirst().source().id();
+            var manager = app.getBean(PersistenceManager.class);
+            var payload = manager.optionalGetOne(QuerySpecification.withStatement(new CypherStatement("""
+                    MATCH (r:LiveCommitmentsReceipt {id: $id}) RETURN r.payload AS payload
+                    """)).bind(Map.of("id", id)).transform(String.class)).orElseThrow();
+            var legacy = JSON.readTree(payload);
+            ((ObjectNode) legacy.path("source")).remove(List.of("signedAttested", "selectedClaimId"));
+            ((ObjectNode) legacy.path("observations").get(0)).remove("text");
+            manager.execute(QuerySpecification.withStatement(new CypherStatement("""
+                    MATCH (r:LiveCommitmentsReceipt {id: $id}) SET r.payload = $payload
+                    """)).bind(Map.of("id", id, "payload", legacy.toString())));
+        }
+        try (var restarted = start()) {
+            var store = restarted.getBean(LiveCaseStore.class);
+            var snapshot = store.read(null);
+            assertThat(snapshot.receipts()).singleElement().satisfies(receipt -> {
+                assertThat(receipt.source().signedAttested()).isFalse();
+                assertThat(receipt.source().selectedClaimId()).isNull();
+                assertThat(receipt.decisions()).singleElement().satisfies(decision -> {
+                    assertThat(decision.text()).isEqualTo(statement);
+                    assertThat(decision.outcome()).isEqualTo("AGREED");
+                });
+            });
+            assertThat(store.findIntake(LiveCase.sourceId(upload)).orElseThrow().claims().getFirst().text())
+                    .isEqualTo(statement);
         }
     }
 

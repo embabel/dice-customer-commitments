@@ -24,17 +24,20 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -57,7 +60,10 @@ final class LiveCaseStore {
     private final DrivineAuditLogStore audit;
     private final PersistenceManager manager;
     private final ReceiptClock clock = new ReceiptClock(Clock.systemUTC(), new ThreadLocal<>());
-    private final JsonMapper json = JsonMapper.builder().build();
+    // Legacy receipt payloads have no signedAttested field. Only the store mapper defaults it to false.
+    private final JsonMapper json = JsonMapper.builder()
+            .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+            .build();
 
     LiveCaseStore(PropositionRepository repository, PersistenceManager manager, PlatformTransactionManager transactions) {
         if (!(repository instanceof DrivinePropositionRepository drivine)) {
@@ -86,12 +92,20 @@ final class LiveCaseStore {
             if (at == null) {
                 return currentSnapshot(checkpoint);
             }
-            var sources = new HashMap<String, LiveCase.Source>();
-            var claims = audit.beliefSetAsOf(CONTEXT, at).stream()
-                    .map(fact -> claim(fact.getId(), fact.getText(), fact.getStatus(), sources))
+            // A deduplicated receipt advances the workspace checkpoint without adding an audit event.
+            // Include that committed checkpoint in DICE's observed time if the wall clock moved backward.
+            var now = clock.instant();
+            var observedThrough = checkpoint.head().isAfter(now) ? checkpoint.head() : now;
+            var facts = clock.at(observedThrough, () -> audit.beliefSetAsOf(CONTEXT, at)).stream()
+                    .map(fact -> new Fact(fact.getId(), fact.getText(), fact.getStatus()))
                     .toList();
-            return new LiveCase.Snapshot(at, checkpoint.baseline(), true, claims);
+            return snapshot(at, checkpoint.baseline(), true, facts);
         });
+    }
+
+    Optional<LiveCase.Intake> findIntake(String sourceId) {
+        return audit.duringWrite(CONTEXT, () -> receipt(sourceId)
+                .map(existing -> intake(currentSnapshot(checkpoint()), existing)));
     }
 
     LiveCase.Intake save(LiveCase.Upload upload, List<LiveCase.Candidate> candidates) {
@@ -117,7 +131,8 @@ final class LiveCaseStore {
             if (!receivedAt.isAfter(checkpoint.head())) {
                 receivedAt = checkpoint.head().plusNanos(1);
             }
-            var source = new LiveCase.Source(sourceId, upload.title(), upload.kind(), upload.text(), receivedAt);
+            var source = new LiveCase.Source(sourceId, upload.title(), upload.kind(), upload.text(), receivedAt,
+                    upload.signedAttested(), upload.replacesClaimId());
             return clock.at(receivedAt, () -> write(source, upload, prepared, predecessor, facts.size(), checkpoint));
         });
     }
@@ -183,7 +198,7 @@ final class LiveCaseStore {
             var duplicate = !saved.getId().equals(id);
             var proposed = decision(upload, candidate, replacement ? predecessor.getId() : null);
             var applied = outcome(upload, conflicting, duplicate, proposed);
-            observations.add(new Observation(saved.getId(), classification, candidate.provider(), applied));
+            observations.add(new Observation(saved.getId(), saved.getText(), classification, candidate.provider(), applied));
             if (duplicate) {
                 // The receipt describes this source. The canonical claim keeps its original authority and citation.
                 continue;
@@ -250,8 +265,9 @@ final class LiveCaseStore {
         var claims = receipt.observations().stream().map(observation -> {
             var claim = canonical.get(observation.id());
             var decision = observation.decision();
-            return new LiveCase.Claim(claim.id(), claim.text(), observation.classification(), claim.status(), decision.outcome(),
-                    decision.reason(), observation.provider(), decision.replacesClaimId(), receipt.source());
+            return new LiveCase.Claim(claim.id(), observation.textOr(claim.text()), observation.classification(),
+                    claim.status(), decision.outcome(), decision.reason(), observation.provider(),
+                    decision.replacesClaimId(), receipt.source());
         }).toList();
         return new LiveCase.Intake(snapshot, claims);
     }
@@ -261,19 +277,38 @@ final class LiveCaseStore {
     }
 
     private LiveCase.Snapshot currentSnapshot(Checkpoint checkpoint) {
-        var sources = new HashMap<String, LiveCase.Source>();
-        var claims = current().stream()
-                .map(fact -> claim(fact.getId(), fact.getText(), fact.getStatus(), sources))
-                .toList();
-        return new LiveCase.Snapshot(checkpoint.head(), checkpoint.baseline(), false, claims);
+        var facts = current().stream().map(fact -> new Fact(fact.getId(), fact.getText(), fact.getStatus())).toList();
+        return snapshot(checkpoint.head(), checkpoint.baseline(), false, facts);
     }
 
-    private LiveCase.Claim claim(String id, String text, PropositionStatus status, Map<String, LiveCase.Source> sources) {
-        var evidence = evidence(id);
-        var source = sources.computeIfAbsent(evidence.sourceId(),
-                sourceId -> receipt(sourceId).orElseThrow().source());
-        return new LiveCase.Claim(id, text, evidence.classification(), status.name(), evidence.outcome(), evidence.reason(),
-                evidence.decisionProvider(), evidence.replacesClaimId(), source);
+    private LiveCase.Snapshot snapshot(Instant at, Instant baseline, boolean historical, List<Fact> facts) {
+        var receipts = receiptsThrough(at);
+        var sources = new HashMap<String, LiveCase.Source>();
+        receipts.forEach(receipt -> sources.put(receipt.source().id(), receipt.source()));
+
+        var canonicalText = new HashMap<String, String>();
+        for (var fact : facts) {
+            canonicalText.put(fact.id(), fact.text());
+        }
+        var claims = facts.stream().map(fact -> claim(fact, sources)).toList();
+        var reviews = receipts.stream().map(receipt -> review(receipt, canonicalText)).toList();
+        return new LiveCase.Snapshot(at, baseline, historical, claims, reviews);
+    }
+
+    private LiveCase.Claim claim(Fact fact, Map<String, LiveCase.Source> sources) {
+        var evidence = evidence(fact.id());
+        var source = Objects.requireNonNull(sources.get(evidence.sourceId()), "Claim source is missing at this checkpoint");
+        return new LiveCase.Claim(fact.id(), fact.text(), evidence.classification(), fact.status().name(),
+                evidence.outcome(), evidence.reason(), evidence.decisionProvider(), evidence.replacesClaimId(), source);
+    }
+
+    private static LiveCase.ReviewReceipt review(Receipt receipt, Map<String, String> canonicalText) {
+        var decisions = receipt.observations().stream().map(observation -> {
+            var decision = observation.decision();
+            return new LiveCase.ReviewDecision(observation.id(), observation.textOr(canonicalText.get(observation.id())),
+                    observation.classification(), decision.outcome(), decision.reason(), observation.provider());
+        }).toList();
+        return new LiveCase.ReviewReceipt(receipt.source(), decisions);
     }
 
     private Checkpoint checkpoint() {
@@ -290,6 +325,16 @@ final class LiveCaseStore {
                             """, CONTEXT, json.writeValueAsString(checkpoint)));
                     return checkpoint;
                 });
+    }
+
+    private List<Receipt> receiptsThrough(Instant at) {
+        return manager.query(query("""
+                MATCH (r:LiveCommitmentsReceipt {contextId: $scope}) RETURN r.payload AS payload
+                """, CONTEXT, "").transform(String.class)).stream()
+                .map(value -> json.readValue(value, Receipt.class))
+                .filter(receipt -> !receipt.source().receivedAt().isAfter(at))
+                .sorted(Comparator.comparing(receipt -> receipt.source().receivedAt()))
+                .toList();
     }
 
     private Optional<Receipt> receipt(String id) {
@@ -315,7 +360,14 @@ final class LiveCaseStore {
     private record AssessmentKey(String text, String classification, String provider) {
     }
 
-    private record Observation(String id, String classification, String provider, Decision decision) {
+    private record Observation(String id, String text, String classification, String provider, Decision decision) {
+        String textOr(String canonicalText) {
+            // Receipts written before this field was introduced refer to immutable canonical claim text.
+            return text == null ? Objects.requireNonNull(canonicalText, "Receipt claim is missing") : text;
+        }
+    }
+
+    private record Fact(String id, String text, PropositionStatus status) {
     }
 
     private record Receipt(LiveCase.Source source, List<Observation> observations) {

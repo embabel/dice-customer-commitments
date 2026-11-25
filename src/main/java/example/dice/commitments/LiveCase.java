@@ -38,16 +38,36 @@ final class LiveCase {
         }
     }
 
-    public record Source(String id, String title, String kind, String text, Instant receivedAt) {
+    public record Source(String id, String title, String kind, String text, Instant receivedAt,
+                         boolean signedAttested, String selectedClaimId) {
+        public Source(String id, String title, String kind, String text, Instant receivedAt) {
+            this(id, title, kind, text, receivedAt, false, null);
+        }
     }
 
     public record Claim(String id, String text, String classification, String status, String outcome, String reason,
                         String decisionProvider, String replacesClaimId, Source source) {
     }
 
-    public record Snapshot(Instant asOf, Instant baseline, boolean historical, List<Claim> claims) {
+    public record ReviewDecision(String claimId, String text, String classification, String outcome, String reason,
+                                 String provider) {
+    }
+
+    public record ReviewReceipt(Source source, List<ReviewDecision> decisions) {
+        public ReviewReceipt {
+            decisions = List.copyOf(decisions);
+        }
+    }
+
+    public record Snapshot(Instant asOf, Instant baseline, boolean historical, List<Claim> claims,
+                           List<ReviewReceipt> receipts) {
         public Snapshot {
             claims = List.copyOf(claims);
+            receipts = receipts == null ? List.of() : List.copyOf(receipts);
+        }
+
+        public Snapshot(Instant asOf, Instant baseline, boolean historical, List<Claim> claims) {
+            this(asOf, baseline, historical, claims, List.of());
         }
     }
 

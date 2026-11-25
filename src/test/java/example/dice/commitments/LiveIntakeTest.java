@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * E1: DICE extracts from unfamiliar source text, classifies each claim, and persists its exact source.
  * E2: Even an amendment classification cannot supersede an agreement without attestation.
  * I1: An extraction with no propositions writes no claims.
+ * L1: A committed receipt can be returned after restart without a provider call.
  */
 class LiveIntakeTest {
 
@@ -124,6 +125,25 @@ class LiveIntakeTest {
                     .hasMessage("DICE did not find any claims in this source.");
             assertThat(model.prompts).hasSize(1);
             assertThat(context.getBean(LiveCaseStore.class).read(null).claims()).isEmpty();
+        }
+    }
+
+    @Test
+    void l1RetryReturnsACommittedReceiptWhenTheProviderHasNoResponse() {
+        var upload = new LiveCase.Upload("Juniper onboarding", "SIGNED_AGREEMENT", AGREEMENT_TEXT, null, true);
+        LiveCase.Intake saved;
+        try (var context = start()) {
+            var model = context.getBean(ScriptedChatModel.class);
+            model.claim(ORIGINAL, "COMMITMENT");
+            saved = context.getBean(LiveIntake.class).ingest(upload);
+            assertThat(model.responses).isEmpty();
+        }
+        try (var restarted = start()) {
+            var model = restarted.getBean(ScriptedChatModel.class);
+            assertThat(model.responses).isEmpty();
+            var retried = restarted.getBean(LiveIntake.class).ingest(upload);
+            assertThat(retried).isEqualTo(saved);
+            assertThat(model.prompts).isEmpty();
         }
     }
 
