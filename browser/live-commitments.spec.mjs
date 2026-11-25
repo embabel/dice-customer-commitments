@@ -128,7 +128,10 @@ async function capture(page, name) {
   const directory = process.env.COMMITMENTS_ARTIFACTS
   if (directory) {
     mkdirSync(directory, { recursive: true })
-    await page.evaluate(() => document.fonts.ready)
+    await page.evaluate(async () => {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      await document.fonts.ready
+    })
     await page.screenshot({ path: join(directory, name + '.png'), fullPage: true })
   }
 }

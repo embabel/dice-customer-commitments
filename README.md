@@ -4,6 +4,8 @@ The customer asks whether we can move a migration up to January 9. The signed ag
 
 Customer Commitments is a standalone Java app that shows how we can use DICE to answer that question and show our work. Paste an agreement, email, or call transcript. DICE pulls out the claims, an Embabel decision model classifies them, and the app decides which ones can change the signed record. Ask the agent a follow-up in the AG-UI workbench and open the citation to see the original passage. You can also go back to an earlier record and ask what we knew then.
 
+![Live commitments workbench with the updated signed schedule, a chat answer, and source evidence](docs/screenshots/live-agreement-desktop.webp)
+
 ## Run the live application
 
 Use Java 21 and set `OPENAI_API_KEY` in your environment.
@@ -80,7 +82,14 @@ Open the [recorded case](http://127.0.0.1:8082). It uses its own database at `./
 
 The recorded chat handles paraphrases about the sample agreement and short follow-ups. An unsupported question offers a way back to the signed commitments.
 
-![Recorded walkthrough showing the revised migration date beside the signed amendment](https://github.com/embabel/dice-customer-commitments/releases/download/readme-screenshots/amendment-desktop.png)
+![Recorded walkthrough showing the revised migration date beside the signed amendment](docs/screenshots/recorded-amendment-desktop.webp)
+
+<details>
+<summary>Opening record on a phone</summary>
+
+![Mobile recorded walkthrough showing the original signed commitments and evidence for an open item](docs/screenshots/opening-record-mobile.webp)
+
+</details>
 
 ## Verify
 
