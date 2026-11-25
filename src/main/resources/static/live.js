@@ -103,7 +103,37 @@ function sourcesFor(claims) {
   return [...new Map(claims.map(({ source }) => [source.id, source])).values()]
 }
 
-function showEvidence(source, moveFocus = false) {
+function reviewedSources(view) {
+  const sources = new Map(sourcesFor(view.claims).map((source) => [source.id, source]))
+  for (const { source } of view.receipts ?? []) sources.set(source.id, source)
+  return [...sources.values()].sort((first, second) =>
+    sortTimeKey(first.receivedAt).localeCompare(sortTimeKey(second.receivedAt)))
+}
+
+function sourceReview(receipt, view) {
+  const { source, decisions } = receipt
+  const review = element('section', 'source-review')
+  review.setAttribute('aria-label', 'Source review')
+  review.append(element('h4', '', 'Source review'))
+  if (source.signedAttested) {
+    review.append(element('p', 'review-meta', 'Operator attested to reviewing the signed document.'))
+  }
+  if (source.selectedClaimId) {
+    const selected = view.claims.find(({ id }) => id === source.selectedClaimId)
+    if (selected) review.append(element('p', 'review-meta', 'Selected amendment target · ' + selected.text))
+  }
+  for (const decision of decisions) {
+    const row = element('article', 'receipt-decision')
+    row.append(decisionLabels(decision), element('h5', 'claim-title', decision.text))
+    if (decision.reason) row.append(element('p', 'review-meta', decision.reason))
+    if (decision.provider) row.append(element('p', 'review-meta', 'Decision model · ' + decision.provider))
+    review.append(row)
+  }
+  if (!decisions.length) review.append(element('p', 'review-meta', 'No claims recorded for this source.'))
+  return review
+}
+
+function showEvidence(source, moveFocus = false, view = snapshot) {
   selectedSource = source?.id
   for (const button of ui.evidenceList.children) {
     button.setAttribute('aria-pressed', String(button.dataset.sourceId === selectedSource))
@@ -118,27 +148,33 @@ function showEvidence(source, moveFocus = false) {
     element('p', 'reference', metadata),
     element('blockquote', '', source.text),
   )
+  const receipt = view.receipts?.find(({ source: received }) => received.id === source.id)
+  if (receipt) ui.evidenceDetail.append(sourceReview(receipt, view))
+  ui.evidenceDetail.scrollTop = 0
   if (moveFocus) {
     ui.evidenceDetail.focus({ preventScroll: true })
     ui.evidenceDetail.scrollIntoView({ block: 'nearest' })
   }
 }
 
-function sourceButton(className, source, label = source.title) {
-  return addButton(className, label, () => showEvidence(source, true))
+function sourceButton(className, source, label = source.title, view = snapshot) {
+  return addButton(className, label, () => showEvidence(source, true, view))
+}
+
+function decisionLabels({ classification, outcome, status }) {
+  const labels = element('div', 'claim-labels')
+  const outcomeClass = signedOutcomes.has(outcome) ? 'signed-type'
+    : outcome === 'REVIEW_NEEDED' ? 'review-type' : 'recorded-type'
+  labels.append(
+    element('span', 'type', 'Model · ' + (names[classification] ?? classification)),
+    element('span', 'type ' + outcomeClass, 'Policy · ' + (names[outcome] ?? outcome)),
+  )
+  if (status === 'SUPERSEDED') labels.append(element('span', 'type', names.SUPERSEDED))
+  return labels
 }
 
 function claimRow(claim) {
   const node = element('article', 'live-claim')
-  const labels = element('div', 'claim-labels')
-  const outcomeClass = signedOutcomes.has(claim.outcome) ? 'signed-type'
-    : claim.outcome === 'REVIEW_NEEDED' ? 'review-type' : 'recorded-type'
-  labels.append(
-    element('span', 'type', 'Model · ' + (names[claim.classification] ?? claim.classification)),
-    element('span', 'type ' + outcomeClass, 'Policy · ' + (names[claim.outcome] ?? claim.outcome)),
-  )
-  if (claim.status === 'SUPERSEDED') labels.append(element('span', 'type', names.SUPERSEDED))
-
   const details = element('details', 'decision-detail')
   details.append(element('summary', '', 'Decision details'))
   if (claim.reason) details.append(element('p', '', claim.reason))
@@ -151,7 +187,7 @@ function claimRow(claim) {
     }
   }
   node.append(
-    labels,
+    decisionLabels(claim),
     element('h3', 'claim-title', claim.text),
     sourceButton('claim-source', claim.source),
     details,
@@ -192,7 +228,7 @@ function renderSnapshot(next) {
   const { claims, historical, asOf } = next
   const signed = claims.filter(activeSigned)
   const other = claims.filter((claim) => !activeSigned(claim))
-  const sources = sourcesFor(claims)
+  const sources = reviewedSources(next)
   renderCheckpoints(sources)
   ui.recordTime.textContent = (historical ? 'As recorded ' : 'Recorded through ') + timeLabel(asOf)
   ui.signedCount.textContent = signed.length ? signed.length + ' active' : ''
@@ -291,12 +327,16 @@ async function submitSource(event) {
   event.preventDefault()
   if (activity || !snapshot || snapshot.historical) return
   const title = ui.sourceTitle.value.trim()
-  const text = ui.sourceText.value.trim()
+  const text = ui.sourceText.value
   const kind = ui.sourceKind.value
   const upload = { title, kind, text, signedAttested: signedKinds.has(kind) && ui.signedAttested.checked }
   if (kind === 'SIGNED_AMENDMENT') upload.replacesClaimId = ui.replacementTarget.value
-  if (!title || !text) {
+  if (!title || !text.trim()) {
     showMessage(ui.sourceError, 'Enter a source title and the original text.')
+    return
+  }
+  if (title.length > ui.sourceTitle.maxLength || text.length > ui.sourceText.maxLength) {
+    showMessage(ui.sourceError, 'Use a shorter title or passage.')
     return
   }
   showMessage(ui.sourceError, '')
@@ -381,7 +421,7 @@ function renderCitations(message, ids, view) {
   if (!sources.length) return
   const citations = element('div', 'citations')
   citations.setAttribute('aria-label', 'Sources cited')
-  citations.append(...sources.map((source) => sourceButton('citation', source)))
+  citations.append(...sources.map((source) => sourceButton('citation', source, source.title, view)))
   message.append(citations)
 }
 
