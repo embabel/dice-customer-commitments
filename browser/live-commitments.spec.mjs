@@ -129,7 +129,7 @@ async function capture(page, name) {
   if (directory) {
     mkdirSync(directory, { recursive: true })
     await page.evaluate(async () => {
-      window.scrollTo(0, 0)
+      window.scrollTo({ top: 0, behavior: 'instant' })
       await document.fonts.ready
     })
     await page.screenshot({ path: join(directory, name + '.png'), fullPage: true })
