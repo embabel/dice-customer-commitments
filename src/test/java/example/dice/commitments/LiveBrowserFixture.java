@@ -11,8 +11,10 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 import java.util.ArrayList;
@@ -26,6 +28,10 @@ public final class LiveBrowserFixture {
     private static final String MODEL = "browser-fixture";
 
     public static void main(String[] args) {
+        start(WebApplicationType.SERVLET, args);
+    }
+
+    static ConfigurableApplicationContext start(WebApplicationType web, String... args) {
         var settings = new ArrayList<>(List.of(
                 "--commitments.model=" + MODEL,
                 "--commitments.decision=" + MODEL,
@@ -33,7 +39,8 @@ public final class LiveBrowserFixture {
                 "--spring.autoconfigure.exclude=com.embabel.agent.autoconfigure.models.openai.AgentOpenAiAutoConfiguration"));
         settings.addAll(List.of(args));
 
-        new SpringApplicationBuilder(Application.class, FixtureConfiguration.class)
+        return new SpringApplicationBuilder(Application.class, FixtureConfiguration.class)
+                .web(web)
                 .profiles("live")
                 .run(settings.toArray(String[]::new));
     }

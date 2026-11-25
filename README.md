@@ -62,6 +62,8 @@ Jev classifies claims. The chat model still extracts propositions and powers the
 
 The attestation records the local operator’s review of a signed document. An amendment also needs a selected active commitment and a matching extracted amendment claim. An email carrying a proposed date remains useful evidence without acquiring authority to change the agreement. The application uses one scoped agreement and one local operator. An adopter serving multiple users should derive the agreement scope from access control. Reuse the SQLite file to retain claims and citations across restarts. The browser sends earlier chat turns with each follow-up.
 
+DICE canonicalizes identical propositions. The intake result records the model and policy decisions for that receipt. When a new claim matches an existing proposition, the app preserves the original claim’s authority and supersession history.
+
 ## Run the recorded walkthrough
 
 Launch the default build without a profile or model credentials.
@@ -84,6 +86,6 @@ bun run test:browser
 COMMITMENTS_BROWSER_MODE=live bun run test:browser
 ```
 
-The live browser test runs the real app, AG-UI connection, DICE and SQLite with a scripted test-classpath model. It requires no provider keys. The recorded test launches the packaged application. Both require permission to listen on a local port. Set `COMMITMENTS_ARTIFACTS` to an output directory to capture screenshots.
+The live workflow integration test uses MockMvc and a scripted test-classpath model to exercise the real Embabel agent, DecisionService, DICE and SQLite over AG-UI without opening a port. The live browser test uses the same fixture provider against the running app. It requires no provider keys. The recorded test launches the packaged application. Both require permission to listen on a local port. Set `COMMITMENTS_ARTIFACTS` to an output directory to capture screenshots.
 
 The application uses the DICE 0.5.0 snapshot and Embabel Agent 1.5.4 from the repositories in [pom.xml](pom.xml).
