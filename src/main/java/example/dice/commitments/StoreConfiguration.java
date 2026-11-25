@@ -24,6 +24,8 @@ import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -70,18 +72,21 @@ class StoreConfiguration {
     }
 
     @Bean
+    @Profile("!live")
     SchemaCatalog commitmentsCatalog() {
         return SchemaCatalog.of(List.of(new UniquenessConstraintSpec("CommitmentsBaseline", "id")))
                 .forDatabase(DATABASE);
     }
 
     @Bean
+    @Profile("!live")
     DrivineAuditLogStore auditLog(PersistenceManager manager, PlatformTransactionManager transactions) {
         // The fixture records one correction at the known receipt time.
         return new DrivineAuditLogStore(manager, transactions, Clock.fixed(AMENDMENT, ZoneOffset.UTC));
     }
 
     @Bean
+    @Profile("!live")
     CommitmentStore commitmentStore(PropositionRepository raw, DrivineAuditLogStore audit,
                                     PersistenceManager manager) {
         if (!(raw instanceof DrivinePropositionRepository repository)) {
@@ -91,12 +96,14 @@ class StoreConfiguration {
     }
 
     @Bean
+    @Profile("!live")
     LlmService<?> recordedExtractionModel() {
         return new SpringAiLlmService("recorded-extraction", "customer-commitments", new RecordedExtraction());
     }
 
     @Bean
-    EmbeddingService demoEmbeddings() {
+    @Primary
+    EmbeddingService storageEmbeddings() {
         var model = new EmbeddingModel() {
             @Override
             public EmbeddingResponse call(EmbeddingRequest request) {
@@ -109,7 +116,7 @@ class StoreConfiguration {
                 return new float[]{1, 0, 0};
             }
         };
-        // Both the agreement and replay use exact context reads. No decision uses this fixture vector.
+        // Both profiles use exact-context reads. This local vector keeps repository writes independent of model calls.
         return new SpringAiEmbeddingService("demo-embeddings", "customer-commitments", model, 3, null);
     }
 }

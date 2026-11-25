@@ -1,6 +1,7 @@
 package example.dice.commitments;
 
 import com.embabel.dice.audit.AuditCoverageException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 
 @RestController
+@Profile("!live")
 @RequestMapping("/api/commitments")
 class CommitmentsHttp {
 
