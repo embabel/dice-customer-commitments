@@ -72,16 +72,33 @@ final class CommitmentsAgUi {
             throw badRequest("Use at most 48000 characters and end the conversation with a user message.");
         }
 
-        var state = input.state();
-        if (state != null && !state.isNull() && !state.isObject()) {
+        return new Run(input.threadId(), input.runId(), selectedInstant(input.state()), List.copyOf(turns));
+    }
+
+    private static Instant selectedInstant(JsonNode state) {
+        if (state == null || state.isNull()) {
+            return null;
+        }
+        if (!state.isObject()) {
             throw badRequest("Agreement state must be an object.");
         }
-        var at = state == null ? null : state.get("at");
-        if (at != null && !at.isNull() && !at.isTextual()) {
+        var historical = state.get("historical");
+        if (historical != null && !historical.isBoolean()) {
+            throw badRequest("Historical agreement state must be a boolean.");
+        }
+        var at = state.get("at");
+        if (at != null) {
+            return at.isNull() ? null : requiredInstant(at);
+        }
+        // AG-UI clients feed the emitted snapshot back as state on follow-up runs.
+        return historical != null && historical.booleanValue() ? requiredInstant(state.get("asOf")) : null;
+    }
+
+    private static Instant requiredInstant(JsonNode value) {
+        if (value == null || !value.isTextual()) {
             throw badRequest("Select a recorded time using an ISO-8601 instant.");
         }
-        var instant = at == null || at.isNull() ? null : parseInstant(at.stringValue());
-        return new Run(input.threadId(), input.runId(), instant, List.copyOf(turns));
+        return parseInstant(value.stringValue());
     }
 
     static Instant parseInstant(String value) {

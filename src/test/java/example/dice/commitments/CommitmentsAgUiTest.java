@@ -8,9 +8,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -106,6 +108,10 @@ class CommitmentsAgUiTest {
                 normal.replace("\"id\":\"m2\"", "\"id\":\"m1\""),
                 runInput("Tuesday"),
                 normal.replace("\"at\":null", "\"at\":500"),
+                normal.replace("\"at\":null", "\"historical\":true"),
+                normal.replace("\"at\":null", "\"historical\":true,\"asOf\":500"),
+                normal.replace("\"at\":null", "\"historical\":true,\"asOf\":\"Tuesday\""),
+                normal.replace("\"at\":null", "\"historical\":\"true\""),
                 normal.replace("Which source confirms that?", "x".repeat(8001)),
                 normal.replace("Which source confirms that?", " "),
                 normal.replace("\"context\":[]", "\"context\":[{\"description\":\"client claim\"}]"));
@@ -167,6 +173,38 @@ class CommitmentsAgUiTest {
         mvc.perform(post(AGREEMENT + "/agent").contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.TEXT_EVENT_STREAM).content(runInput(AMENDED.toString())))
                 .andExpect(status().isUnprocessableContent()).andExpect(request().asyncNotStarted());
+    }
+
+    @Test
+    void l1RoundTripsHistoricalAgUiStateAndLetsAnExplicitNullSelectTheCurrentRecord() throws Exception {
+        var readSelectors = new ArrayList<Instant>();
+        var mvc = mvc(at -> {
+            readSelectors.add(at);
+            return at == null ? snapshot(AMENDED, "claim-2", false) : snapshot(at, "claim-1", true);
+        }, unusedIntake(), (turns, view) -> new LiveCommitmentsAgent.Answer(
+                view.historical() ? "The opening agreement." : "The revised agreement.",
+                List.of(view.evidence().getFirst().id())));
+
+        var opening = run(mvc, runInput(OPENING.toString()));
+        var emittedState = opening.get(1).get("snapshot");
+        assertThat(emittedState.has("at")).isFalse();
+        var followUp = (ObjectNode) JSON.readTree(runInput(null));
+        followUp.put("runId", "run-2");
+        followUp.set("state", emittedState);
+
+        var historical = run(mvc, JSON.writeValueAsString(followUp));
+        assertThat(historical.get(1).get("snapshot")).isEqualTo(emittedState);
+        assertThat(historical.get(5).get("value").get("ids").get(0).asText()).isEqualTo("claim-1");
+
+        var returnToCurrent = (ObjectNode) emittedState.deepCopy();
+        returnToCurrent.putNull("at").put("asOf", "ignored when at is explicit");
+        followUp.put("runId", "run-3");
+        followUp.set("state", returnToCurrent);
+        var current = run(mvc, JSON.writeValueAsString(followUp));
+        assertThat(current.get(1).get("snapshot").get("asOf").asText()).isEqualTo(AMENDED.toString());
+        assertThat(current.get(1).get("snapshot").get("historical").asBoolean()).isFalse();
+        assertThat(current.get(5).get("value").get("ids").get(0).asText()).isEqualTo("claim-2");
+        assertThat(readSelectors).containsExactly(OPENING, OPENING, null);
     }
 
     private static MockMvc mvc(Function<Instant, LiveCase.Snapshot> read,
