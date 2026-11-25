@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: {
     command: live
       ? './mvnw -B spring-boot:test-run -Dspring-boot.run.main-class=example.dice.commitments.LiveBrowserFixture'
-      : 'java -jar target/dice-customer-commitments.jar',
+      : 'java -jar target/dice-customer-commitments.jar --spring.profiles.active=offline',
     env: { COMMITMENTS_PORT: port, COMMITMENTS_DB: database },
     url: live ? address + '/live.html' : address,
     reuseExistingServer: false,

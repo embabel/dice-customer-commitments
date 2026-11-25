@@ -59,28 +59,43 @@ class Commitments {
         return view(null);
     }
 
-    Answer ask(String question, Instant at) {
+    Answer ask(String question, Instant at, List<String> previousQuestions) {
         var selected = view(at);
         var token = question.strip().toLowerCase(Locale.ROOT).replaceFirst("[?.!]$", "").strip();
+        var topic = topic(token);
+        if (topic.isEmpty() && previousQuestions != null
+                && token.matches("why|how so|what (about|does) (it|that|this).*|what evidence do we have|show (me )?the source")) {
+            for (var prior : previousQuestions.reversed()) {
+                topic = topic(prior);
+                if (!topic.isEmpty()) break;
+            }
+        }
         var migration = selected.active(Kind.MIGRATION);
         var security = selected.active(Kind.SECURITY);
-        return switch (token) {
-            case "what did we promise", "what is the current promise", "what is the current agreement",
-                 "when is migration", "when is the migration", "current promise" ->
+        return switch (topic) {
+            case "promise" ->
                     new Answer(true, "Rivet Systems promised to migrate Tandem’s depot accounts by "
                             + readable(migration.valueDate()) + ". Tandem Transit promised to deliver the SSO security checklist by "
                             + readable(security.valueDate()) + ".", List.of(migration.id(), security.id()), selected);
-            case "what changed", "what did the amendment change" -> change(selected, migration, security);
-            case "what's open", "what is open", "what’s open", "what is still open", "what needs following up" -> {
+            case "change" -> change(selected, migration, security);
+            case "open" -> {
                 var task = selected.active(Kind.TASK);
                 var runbook = selected.active(Kind.SPOKEN);
                 yield new Answer(true, "Maya promised the migration runbook by " + readable(runbook.valueDate())
                         + ". Her reminder to ask about a Saturday cutover is still a task. The handoff records no agreed Saturday date.",
                         List.of(runbook.id(), task.id()), selected);
             }
-            default -> new Answer(false, "This demo can answer what was promised, what changed, or what’s open.",
+            default -> new Answer(false, "I can’t answer that from this agreement record. Would you like to know what we actually promised?",
                     List.of(), selected);
         };
+    }
+
+    private static String topic(String question) {
+        var words = question.toLowerCase(Locale.ROOT);
+        if (words.matches(".*\\b(chang\\w*|amend\\w*|moved|revis\\w*)\\b.*")) return "change";
+        if (words.matches(".*\\b(open|follow[ -]?up|following up|runbook|saturday|reminder\\w*)\\b.*")) return "open";
+        if (words.matches(".*\\b(promis\\w*|agreed|agreement|migrat\\w*|deliver\\w*|checklist|deadline\\w*|due)\\b.*")) return "promise";
+        return "";
     }
 
     private static Answer change(View selected, Claim migration, Claim security) {

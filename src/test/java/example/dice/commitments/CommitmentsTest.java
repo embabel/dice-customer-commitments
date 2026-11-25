@@ -78,6 +78,9 @@ class CommitmentsTest {
             assertThat(cause.path("citations").size()).isEqualTo(2);
             var unsupported = ask(app, "Give me the renewal price", null);
             assertThat(unsupported.path("supported").asBoolean()).isFalse();
+            assertThat(unsupported.path("text").asString()).contains("Would you like to know what we actually promised?");
+            var paraphrase = ask(app, "When are we supposed to migrate the depot accounts?", null);
+            assertThat(paraphrase.path("text").asString()).contains("25 November 2026");
             assertThat(unsupported.path("citations").isEmpty()).isTrue();
             request(app, CASE + "/amendment", "POST", 200);
             assertThat(directory.resolve("agreements/commitments.sqlite")).isRegularFile();

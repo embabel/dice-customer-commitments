@@ -63,7 +63,7 @@ test('follows a bot citation to the amendment and replays the opening commitment
 
   await page.getByRole('textbox', { name: 'Ask about the agreement' }).fill('Can we invoice this workspace?')
   await ask.click()
-  await expect(page.locator('#answer')).toContainText('This demo can answer what was promised, what changed, or what’s open.')
+  await expect(page.locator('#answer')).toContainText('Would you like to know what we actually promised?')
   await expect(page.locator('#answer .citation')).toHaveCount(0)
 })
 

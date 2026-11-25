@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 
 @RestController
 @Profile("!live")
@@ -45,7 +46,11 @@ class CommitmentsHttp {
         if (question.text() == null || question.text().isBlank() || question.text().length() > 360) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a question between 1 and 360 characters.");
         }
-        return commitments.ask(question.text(), question.at());
+        var previous = question.previousQuestions();
+        if (previous != null && (previous.size() > 8 || previous.stream().anyMatch(text -> text == null || text.length() > 360))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Send at most eight earlier questions of up to 360 characters each.");
+        }
+        return commitments.ask(question.text(), question.at(), previous);
     }
 
     @ExceptionHandler(AuditCoverageException.class)
@@ -57,6 +62,6 @@ class CommitmentsHttp {
     record Amendment(String documentId) {
     }
 
-    record Question(String text, Instant at) {
+    record Question(String text, Instant at, List<String> previousQuestions) {
     }
 }
