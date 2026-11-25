@@ -78,6 +78,8 @@ java -jar target/dice-customer-commitments.jar --spring.profiles.active=offline
 
 Open the [recorded case](http://127.0.0.1:8082). It uses its own database at `./data/customer-commitments.sqlite`, a fixed clock, and recorded model replies. **Import signed amendment** replaces the fixture's migration claim while preserving the earlier answer in **Opening record**.
 
+The recorded chat handles paraphrases about the sample agreement and short follow-ups. An unsupported question offers a way back to the signed commitments.
+
 ![Recorded walkthrough showing the revised migration date beside the signed amendment](https://github.com/embabel/dice-customer-commitments/releases/download/readme-screenshots/amendment-desktop.png)
 
 ## Verify
