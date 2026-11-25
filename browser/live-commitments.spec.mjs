@@ -55,13 +55,27 @@ test('R1 E1 E2 I1 L1 import, discuss and replay a live agreement', async ({ page
   const latest = await ask(page, 'Which deadline stayed in place when the migration moved?')
   expect(latest.answer).toContain('Migration moved to January 22, 2027. The security checklist stayed due January 12, 2027.')
   expect(latest.citationIds).toEqual([revised.id, security.id])
+  const impact = page.getByRole('region', { name: 'Amendment impact' })
+  await expect(impact).toContainText('Before amendment')
+  await expect(impact).toContainText('2027-01-15')
+  await expect(impact).toContainText('After amendment')
+  await expect(impact).toContainText('2027-01-22')
+  await expect(impact).not.toContainText('2027-01-12')
+  const evidence = page.getByRole('complementary', { name: 'Source evidence' })
+  await impact.getByRole('button', { name: 'Open signed amendment' }).click()
+  await expect(evidence.locator('blockquote')).toHaveText(amendment.text)
   await capture(page, 'live-current')
+  await impact.getByRole('button', { name: 'Open prior source' }).click()
+  await expect(evidence.locator('blockquote')).toHaveText(addendum.text)
 
   const checkpoint = original.source.receivedAt
   const loadedHistory = page.waitForResponse((response) =>
     matches(response, 'GET', '/api/live/commitments') && new URL(response.url()).searchParams.get('at') === checkpoint)
-  await page.getByLabel('Agreement record', { exact: true }).selectOption(checkpoint)
+  await evidence.getByRole('button', { name: 'Open record at this source', exact: true }).click()
   expect((await loadedHistory).ok()).toBe(true)
+  await expect(page.getByLabel('Agreement record', { exact: true })).toHaveValue(checkpoint)
+  await expect(impact).toContainText('No signed amendments in this record.')
+  await expect(evidence.getByText(amendment.title)).toHaveCount(0)
 
   await page.setViewportSize({ width: 390, height: 844 })
   const replay = await ask(page, 'What was the migration date in this record?')

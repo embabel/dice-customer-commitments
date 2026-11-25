@@ -42,6 +42,13 @@ test('follows a bot citation to the amendment and replays the opening commitment
   await page.getByRole('button', { name: 'Open citation for Migrate depot accounts', exact: true }).first().click()
   await expect(source.getByRole('heading', { name: 'Schedule amendment' })).toBeVisible()
   await expect(source.locator('blockquote')).toContainText('All other commitments')
+  const impact = page.getByRole('region', { name: 'Amendment impact' })
+  await expect(impact).toContainText('25 Nov 2026')
+  await expect(impact).toContainText('2 Dec 2026')
+  await impact.getByRole('button', { name: 'Open prior source' }).click()
+  await expect(source.locator('blockquote')).toContainText('Rivet Systems will migrate')
+  await impact.getByRole('button', { name: 'Open signed amendment' }).click()
+  await expect(source.locator('blockquote')).toContainText('All other commitments')
   await capture(page, 'desktop')
 
   await page.setViewportSize({ width: 390, height: 844 })

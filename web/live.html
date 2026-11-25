@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Review signed commitments, trace decisions to their sources, and ask about the agreement.">
+  <meta name="theme-color" content="#112d2a">
+  <title>Live agreement workbench · DICE</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./live.css">
+  <script src="./live.ts" type="module"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the agreement</a>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="wordmark"><span class="brand-mark" aria-hidden="true"></span> DICE <span class="brand-divider" aria-hidden="true"></span> Customer Commitments</div>
+      <span class="case-mark">Live agreement</span>
+    </div>
+  </header>
+
+  <main id="main" class="layout">
+    <section class="case-header" aria-labelledby="case-heading">
+      <div>
+        <h1 id="case-heading">Agreement workbench</h1>
+        <p>Follow the signed schedule, trace amendments, and check which commitments stood at each checkpoint.</p>
+      </div>
+      <a class="action add-source-link" href="#add-source">Add source <span aria-hidden="true">＋</span></a>
+    </section>
+
+    <div class="timeline live-timeline">
+      <div class="record-picker">
+        <label for="agreement-record">Agreement record</label>
+        <select id="agreement-record" disabled>
+          <option value="">Current record</option>
+        </select>
+      </div>
+      <p class="observed-time" id="record-time" role="status">Loading agreement…</p>
+    </div>
+    <div id="record-error" class="error record-error" hidden>
+      <p id="record-error-text" role="alert"></p>
+      <button id="retry-record" class="quiet-button" type="button">Retry</button>
+      <a id="fixture-link" class="quiet-button" href="/" hidden>Recorded walkthrough</a>
+    </div>
+    <dl class="record-summary" aria-label="Record summary">
+      <div><dt>Active signed commitments</dt><dd id="signed-total">–</dd></div>
+      <div><dt>Claims needing review</dt><dd id="review-total">–</dd></div>
+      <div><dt>Reviewed sources</dt><dd id="source-total">–</dd></div>
+    </dl>
+    <nav class="panel-nav" aria-label="Agreement sections">
+      <a href="#signed-heading">Schedule</a>
+      <a href="#comparison-heading">Amendments</a>
+      <a href="#ask-heading">Ask</a>
+      <a href="#source-evidence">Evidence</a>
+    </nav>
+    <noscript><p class="error">Enable JavaScript to review sources and ask about the agreement.</p></noscript>
+
+    <div class="live-grid">
+      <div class="workbench-column">
+        <section class="ledger" aria-labelledby="signed-heading">
+          <div class="section-heading">
+            <h2 id="signed-heading">Signed commitments</h2>
+            <span id="signed-count" class="section-note"></span>
+          </div>
+          <div id="signed-claims"><p class="live-empty">Loading agreement…</p></div>
+        </section>
+
+        <section class="comparison" aria-labelledby="comparison-heading">
+          <div class="section-heading">
+            <h2 id="comparison-heading">Amendment impact</h2>
+            <span id="amendment-count" class="section-note"></span>
+          </div>
+          <div id="amendment-impact"><p class="live-empty">Recorded amendments appear here.</p></div>
+        </section>
+
+        <section class="ask live-chat" aria-labelledby="ask-heading">
+          <div class="section-heading">
+            <h2 id="ask-heading">Agreement assistant</h2>
+            <button id="new-conversation" class="quiet-button" type="button" hidden>New conversation</button>
+          </div>
+          <ol id="conversation" class="conversation" aria-label="Conversation" aria-live="polite" aria-relevant="additions text"></ol>
+          <p id="chat-empty" class="chat-intro">Ask about the selected record. Follow the citations back to the original passages.</p>
+          <div id="starting-questions" class="suggestions" aria-label="Suggested questions">
+            <button type="button" data-question="What have we agreed to deliver, and when?" disabled>What have we agreed to?</button>
+            <button type="button" data-question="Which requests still need a decision?" disabled>What needs a decision?</button>
+          </div>
+          <p id="chat-progress" class="chat-progress" role="status"></p>
+          <form id="chat-form" class="ask-form">
+            <label class="visually-hidden" for="question">Ask about the agreement</label>
+            <input id="question" maxlength="2000" placeholder="Ask about the agreement…" autocomplete="off" required disabled>
+            <button id="send-question" class="ask-submit" type="submit" disabled>Ask <span class="arrow" aria-hidden="true"></span></button>
+            <button id="stop-run" class="quiet-button" type="button" hidden>Stop</button>
+          </form>
+          <p id="chat-error" class="ask-error" role="alert"></p>
+        </section>
+
+        <section id="context" class="context-claims" aria-labelledby="context-heading">
+          <div class="section-heading">
+            <h2 id="context-heading">Other recorded claims</h2>
+            <span id="other-count" class="section-note"></span>
+          </div>
+          <div id="context-claims"><p class="live-empty">Loading agreement…</p></div>
+        </section>
+      </div>
+      <div class="workbench-column">
+        <aside id="source-evidence" class="evidence live-evidence" aria-labelledby="evidence-heading">
+          <div class="section-heading evidence-header">
+            <h2 id="evidence-heading">Source evidence</h2>
+            <span id="source-count" class="section-note"></span>
+          </div>
+          <div id="evidence-list" class="source-list" role="group" aria-label="Available sources"></div>
+          <div id="evidence-detail" class="source-detail" tabindex="-1">
+            <p class="live-empty">Sources for the selected record appear here.</p>
+          </div>
+        </aside>
+
+        <section id="add-source" class="intake" aria-labelledby="source-heading">
+          <div class="section-heading">
+            <h2 id="source-heading">Add source</h2>
+          </div>
+          <p id="source-availability" class="live-empty" role="status"></p>
+          <form id="source-form">
+            <fieldset id="source-fields" disabled>
+              <legend class="visually-hidden">Source details</legend>
+              <label for="source-title">Source title</label>
+              <input id="source-title" maxlength="160" placeholder="Onboarding addendum" required>
+
+              <label for="source-kind">Source type</label>
+              <select id="source-kind">
+                <option value="EMAIL">Email</option>
+                <option value="CALL">Call transcript</option>
+                <option value="ASSISTANT_HANDOFF">Assistant handoff</option>
+                <option value="SIGNED_AGREEMENT">Signed agreement</option>
+                <option value="SIGNED_AMENDMENT">Signed amendment</option>
+              </select>
+
+              <div id="target-field" hidden>
+                <label for="replacement-target">Commitment to replace</label>
+                <select id="replacement-target" aria-describedby="target-help"></select>
+                <p id="target-help" class="form-hint">Choose the active signed commitment this amendment revises.</p>
+              </div>
+
+              <div id="signed-attestation" hidden>
+                <label for="signed-attested" class="attestation">
+                  <input id="signed-attested" type="checkbox" aria-describedby="attestation-help">
+                  <span>I reviewed the signed document</span>
+                </label>
+                <p id="attestation-help" class="form-hint">Signature checking is manual. Your attestation is recorded with the source.</p>
+              </div>
+
+              <label for="source-text">Source text</label>
+              <textarea id="source-text" rows="6" maxlength="16000" placeholder="Paste the original text." required></textarea>
+              <button id="review-source" class="action" type="submit">Review source <span class="arrow" aria-hidden="true"></span></button>
+            </fieldset>
+            <p id="source-status" class="form-hint" role="status"></p>
+            <p id="source-error" class="error" role="alert" hidden></p>
+          </form>
+          <div id="intake-result"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
