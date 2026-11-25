@@ -1,6 +1,6 @@
 const api = '/api/live/commitments'
 const ids = [
-  'agreement-record', 'record-time', 'record-error', 'record-error-text', 'retry-record',
+  'fixture-link', 'agreement-record', 'record-time', 'record-error', 'record-error-text', 'retry-record',
   'signed-count', 'signed-claims', 'other-count', 'context-claims', 'source-count', 'evidence-list',
   'evidence-detail', 'source-form', 'source-fields', 'source-availability', 'source-title', 'source-kind',
   'signed-attestation', 'signed-attested', 'source-text', 'target-field', 'replacement-target',
@@ -169,7 +169,7 @@ function sortTimeKey(time) {
 }
 
 function renderCheckpoints(sources) {
-  if (snapshot.baseline) checkpoints.set(snapshot.baseline, 'Opening record')
+  if (snapshot.baseline) checkpoints.set(snapshot.baseline, 'Before first source')
   if (!snapshot.historical && snapshot.asOf && !checkpoints.has(snapshot.asOf)) {
     checkpoints.set(snapshot.asOf, 'Recorded checkpoint')
   }
@@ -224,11 +224,9 @@ function renderSnapshot(next) {
 
 async function requestError(response) {
   const problem = await response.json().catch(() => null)
-  if (problem?.detail) return new Error(problem.detail)
-  if (response.status === 404) {
-    return new Error('The live service is unavailable. Start the app with the live profile or open the recorded walkthrough.')
-  }
-  return new Error('The request could not be completed. Try again.')
+  const error = new Error(problem?.detail || 'The request could not be completed. Try again.')
+  error.status = response.status
+  return error
 }
 
 async function request(path = '', options) {
@@ -256,6 +254,7 @@ function resetConversation() {
 async function loadRecord(at) {
   if (activity) return
   retryAt = at
+  ui.fixtureLink.hidden = true
   showMessage(ui.recordErrorText, '')
   ui.recordError.hidden = true
   setActivity('record')
@@ -273,7 +272,11 @@ async function loadRecord(at) {
   } catch (error) {
     ui.agreementRecord.value = selectedAt
     ui.recordTime.textContent = snapshot ? 'Recorded through ' + timeLabel(snapshot.asOf) : 'Agreement unavailable'
-    showMessage(ui.recordErrorText, error.message)
+    const liveUnavailable = error.status === 404
+    ui.fixtureLink.hidden = !liveUnavailable
+    showMessage(ui.recordErrorText, liveUnavailable
+      ? 'Start the app with the live profile or open the recorded walkthrough.'
+      : error.message)
     ui.recordError.hidden = false
     if (!snapshot) {
       claimList(ui.signedClaims, [], 'Agreement data is unavailable.')
