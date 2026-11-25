@@ -29,6 +29,7 @@ const arrow = '<span class="arrow" aria-hidden="true"></span>'
 
 let view
 let busy = true
+let previousQuestions = []
 let chosen = 'signed-addendum'
 
 async function request(path = '', options) {
@@ -127,9 +128,10 @@ async function showAnswer(question, { clearDraft = false } = {}) {
     try {
       const answer = await request('/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, at: view.historical ? view.asOf : null }),
+        body: JSON.stringify({ text, at: view.historical ? view.asOf : null, previousQuestions }),
       })
       // Materialize the same view used by the answer. Another tab may have imported an amendment.
+      if (answer.supported) previousQuestions = [...previousQuestions, text].slice(-8)
       view = answer.view
       updateView()
       const citations = distinctCitations(answer.citations)
@@ -164,10 +166,12 @@ function distinctCitations(ids) {
 }
 
 page.current.addEventListener('click', () => run(async () => {
+  previousQuestions = []
   view = await request()
   updateView()
 }))
 page.opening.addEventListener('click', () => run(async () => {
+  previousQuestions = []
   view = await request('?at=' + encodeURIComponent(view.baseline))
   chosen = 'signed-addendum'
   updateView()

@@ -10,10 +10,10 @@ Use Java 21 and set `OPENAI_API_KEY` in your environment.
 
 ```bash
 ./mvnw -B verify
-java -jar target/dice-customer-commitments.jar --spring.profiles.active=live
+java -jar target/dice-customer-commitments.jar
 ```
 
-The live workbench starts with one empty agreement on loopback. The configured models receive the source text, questions, and evidence they need for the selected record. [Open the workbench](http://127.0.0.1:8082/live.html)
+With the key set, the app opens the live workbench with one empty agreement on loopback. The configured models receive the source text, questions, and evidence they need for the selected record. [Open the workbench](http://127.0.0.1:8082/live.html)
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -50,6 +50,8 @@ COMMITMENTS_DECISION_MODEL=jev-latest \
 
 Jev classifies claims. The chat model still extracts propositions and powers the conversational agent. The workbench shows the provider alongside the classification.
 
+Ask in your own words. If the selected agreement cannot answer, the assistant offers a question it can answer from that record.
+
 ## Where each piece fits
 
 | Concern | Integration |
@@ -68,13 +70,15 @@ If the conversation and evidence go over the 64,000-character prompt budget, the
 
 ## Run the recorded walkthrough
 
-Launch the default build without a profile or model credentials.
+Run without model credentials, or explicitly select the offline profile when a key is set.
 
 ```bash
-java -jar target/dice-customer-commitments.jar
+java -jar target/dice-customer-commitments.jar --spring.profiles.active=offline
 ```
 
 Open the [recorded case](http://127.0.0.1:8082). It uses its own database at `./data/customer-commitments.sqlite`, a fixed clock, and recorded model replies. **Import signed amendment** replaces the fixture's migration claim while preserving the earlier answer in **Opening record**.
+
+The recorded chat handles paraphrases about the sample agreement and short follow-ups. An unsupported question offers a way back to the signed commitments.
 
 ![Recorded walkthrough showing the revised migration date beside the signed amendment](https://github.com/embabel/dice-customer-commitments/releases/download/readme-screenshots/amendment-desktop.png)
 

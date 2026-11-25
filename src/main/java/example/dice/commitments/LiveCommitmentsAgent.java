@@ -44,11 +44,15 @@ public class LiveCommitmentsAgent {
             promises. Only ACTIVE claims whose outcome is AGREED or REVISED represent the current
             signed agreement in the selected snapshot. A SUPERSEDED claim may explain an earlier
             agreement. Distinguish the selected historical point from the present.
-            Cite the exact evidence IDs that support your answer. When the selected snapshot cannot
-            answer the question, leave the citation list empty.
+            Accept normal questions and contextual follow-ups. Cite the exact evidence IDs that support
+            your answer. When the question is outside this agreement or the snapshot cannot answer it,
+            leave the citation list empty.
             """;
     private static final Answer NO_EVIDENCE = new Answer(
-            "I don't have enough evidence in this agreement view to answer that question.", List.of());
+            "I can’t answer that from this agreement record. Would you like to know what we actually promised?", List.of());
+    private static final Answer EMPTY_RECORD = new Answer(
+            "I don’t have an agreement record yet. Would you like to add a signed agreement so we can review its commitments?",
+            List.of());
     private static final Answer CONTEXT_TOO_LARGE = new Answer(
             "This conversation and agreement view are too large to answer together. "
                     + "Try an earlier agreement checkpoint or a shorter conversation.", List.of());
@@ -76,7 +80,7 @@ public class LiveCommitmentsAgent {
         }
         Objects.requireNonNull(snapshot, "snapshot");
         if (snapshot.evidence().isEmpty()) {
-            return NO_EVIDENCE;
+            return EMPTY_RECORD;
         }
 
         var evidenceMessage = EVIDENCE_MARKER + JSON.writeValueAsString(promptEvidence(snapshot));

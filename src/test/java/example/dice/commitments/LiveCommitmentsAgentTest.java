@@ -138,13 +138,14 @@ class LiveCommitmentsAgentTest {
                 {"text":"The customer promised a Sunday cutover.", "citationIds":[]}
                 """);
         var unsupported = agent.answer(question(), EARLIER_VIEW);
-        assertThat(unsupported.text()).contains("don't have enough evidence").doesNotContain("promised");
+        assertThat(unsupported.text()).contains("Would you like to know what we actually promised?").doesNotContain("Sunday");
         assertThat(unsupported.citationIds()).isEmpty();
         assertThat(model.prompt).isNotNull();
 
         model.respondWith(null);
         var empty = agent.answer(question(), new LiveCommitmentsAgent.EvidenceView(EARLIER, true, List.of()));
-        assertThat(empty).isEqualTo(unsupported);
+        assertThat(empty.text()).contains("Would you like to add a signed agreement");
+        assertThat(empty.citationIds()).isEmpty();
         assertThat(model.prompt).isNull();
     }
 
