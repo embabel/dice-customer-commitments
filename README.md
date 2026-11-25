@@ -8,21 +8,21 @@ Customer Commitments is a standalone Java app that shows how we can use DICE to 
 
 ## Run the live application
 
-Use Java 21 and set `OPENAI_API_KEY` in your environment.
+Use Java 21, Bun, and Node.js 22.12 or newer. Maven type-checks and bundles both TypeScript workbenches, then packages the fingerprinted assets in the Spring Boot jar. Set `OPENAI_API_KEY` in your environment for the live workbench.
 
 ```bash
 ./mvnw -B verify
 java -jar target/dice-customer-commitments.jar
 ```
 
-With the key set, the app opens the live workbench with one empty agreement on loopback. The configured models receive the source text, questions, and evidence they need for the selected record. [Open the workbench](http://127.0.0.1:8082/live.html)
+With the key set, the app opens the live workbench with one empty agreement on loopback. The configured models receive the source text, questions, and evidence they need for the selected record. [Open the workbench](http://127.0.0.1:8083/live.html)
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `COMMITMENTS_MODEL` | `gpt-4.1-mini` | Chat model for DICE extraction and the Embabel agent |
 | `COMMITMENTS_DECISION_MODEL` | Same as the chat model | Decision provider for classification of intake claims |
 | `COMMITMENTS_DB` | `./data/customer-commitments-live.sqlite` | SQLite file to reopen after restart |
-| `COMMITMENTS_PORT` | `8082` | Local HTTP port |
+| `COMMITMENTS_PORT` | `8083` | Local HTTP port |
 
 ### Try one agreement
 
@@ -70,6 +70,12 @@ DICE keeps one canonical proposition for identical claims. Each distinct submiss
 
 If the conversation and evidence go over the 64,000-character prompt budget, the agent asks you to try an earlier checkpoint or a shorter conversation. This app is scoped to one local agreement workspace, and a record loads its full receipt history.
 
+## Compare changes and replay the record
+
+**Amendment impact** puts each signed replacement next to the commitment it superseded. Open either source to inspect the original wording. Under **Source evidence**, **Open record at this source** restores the agreement as recorded when that source arrived. The schedule, amendments, receipts, and the assistant all use that checkpoint. Return to **Current record** to add more sources.
+
+The live TypeScript workbench consumes AG-UI events through the official `@ag-ui/client` HTTP agent. It updates the selected record from the run's state snapshot, renders assistant text from message deltas, and opens verified source citations from `commitments.citations`.
+
 ## Run the recorded walkthrough
 
 Run without model credentials, or explicitly select the offline profile when a key is set.
@@ -78,7 +84,7 @@ Run without model credentials, or explicitly select the offline profile when a k
 java -jar target/dice-customer-commitments.jar --spring.profiles.active=offline
 ```
 
-Open the [recorded case](http://127.0.0.1:8082). It uses its own database at `./data/customer-commitments.sqlite`, a fixed clock, and recorded model replies. **Import signed amendment** replaces the fixture's migration claim while preserving the earlier answer in **Opening record**.
+Open the [recorded case](http://127.0.0.1:8083). It uses its own database at `./data/customer-commitments.sqlite`, a fixed clock, and recorded model replies. **Import signed amendment** replaces the fixture's migration claim while preserving the earlier answer in **Opening record**.
 
 The recorded chat handles paraphrases about the sample agreement and short follow-ups. An unsupported question offers a way back to the signed commitments.
 

@@ -25,7 +25,6 @@ jobs:
         with:
           bun-version: '1.4.4'
       - run: ./mvnw -B verify
-      - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:browser
         env:
@@ -38,3 +37,15 @@ jobs:
         with:
           name: commitments-screens
           path: ${{ runner.temp }}/commitments-screens/
+      - name: Export screenshots for design inspection
+        env:
+          COMMITMENTS_ARTIFACTS: ${{ runner.temp }}/commitments-screens
+        run: |
+          if ! command -v cwebp >/dev/null; then
+            sudo apt-get install -y webp
+          fi
+          for name in desktop mobile live-current; do
+            cwebp -quiet -q 78 "$COMMITMENTS_ARTIFACTS/$name.png" -o "$COMMITMENTS_ARTIFACTS/$name.webp"
+            base64 -w 800 "$COMMITMENTS_ARTIFACTS/$name.webp" | sed "s/^/CCSCREEN $name /"
+            echo "CCCOMPLETE $name"
+          done

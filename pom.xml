@@ -89,7 +89,41 @@
     </repositories>
     <build>
         <finalName>dice-customer-commitments</finalName>
+        <resources>
+            <resource><directory>src/main/resources</directory></resource>
+            <resource><directory>${project.build.directory}/generated-web</directory></resource>
+            <resource>
+                <directory>web/fonts</directory>
+                <targetPath>static/assets/commitments/licenses</targetPath>
+                <includes><include>*-OFL.txt</include></includes>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>install-web-dependencies</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>bun</executable>
+                            <arguments><argument>install</argument><argument>--frozen-lockfile</argument></arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>bundle-workbench</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>bun</executable>
+                            <arguments><argument>run</argument><argument>build</argument></arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
