@@ -331,10 +331,11 @@ async function* events(body) {
   try {
     for (;;) {
       const { value, done } = await reader.read()
-      if (done) break
-      pending += value
+      pending += value ?? ''
+      // A bare CR at a chunk boundary may be followed by LF. At EOF it stands on its own.
+      const lineEnding = done ? /\r\n|\r|\n/ : /\r\n|\r(?!$)|\n/
       let separator
-      while ((separator = /\r\n|\r(?!$)|\n/.exec(pending))) {
+      while ((separator = lineEnding.exec(pending))) {
         const line = pending.slice(0, separator.index)
         pending = pending.slice(separator.index + separator[0].length)
         if (line === '' && data.length) {
@@ -344,6 +345,7 @@ async function* events(body) {
           data.push(line.slice(5).replace(/^ /, ''))
         }
       }
+      if (done) break
     }
   } finally {
     reader.releaseLock()
