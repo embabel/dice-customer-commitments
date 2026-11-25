@@ -1,8 +1,8 @@
 # DICE Customer Commitments
 
-An account lead is about to give a customer a date. The contract, account email, and signed amendment each suggest a different answer. Which one can the lead stand behind, and what would they have said before the amendment arrived?
+The customer asks whether we can move a migration up to January 9. The signed agreement says January 15. Then an amendment moves it to January 22. Somebody still has to tell the customer which date we actually owe them.
 
-Customer Commitments is a standalone Java application that combines DICE extraction and durable memory, an Embabel conversational agent, a decision model, and an AG-UI web client. Paste a source, inspect how the application treated each claim, and ask follow-up questions with citations to the original passages.
+Customer Commitments is a standalone Java app that shows how we can use DICE to answer that question and show our work. Paste an agreement, email, or call transcript. DICE pulls out the claims, an Embabel decision model classifies them, and the app decides which ones can change the signed record. Ask the agent a follow-up in the AG-UI workbench and open the citation to see the original passage. You can also go back to an earlier record and ask what we knew then.
 
 ## Run the live application
 
@@ -13,7 +13,7 @@ Use Java 21 and set `OPENAI_API_KEY` in your environment.
 java -jar target/dice-customer-commitments.jar --spring.profiles.active=live
 ```
 
-Open the [live workbench](http://127.0.0.1:8082/live.html). The application starts with an empty agreement. It binds to loopback and sends your source text, questions, and selected evidence to the configured model providers.
+The live workbench starts with one empty agreement on loopback. The configured models receive the source text, questions, and evidence they need for the selected record. [Open the workbench](http://127.0.0.1:8082/live.html)
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -50,19 +50,21 @@ COMMITMENTS_DECISION_MODEL=jev-latest \
 
 Jev classifies claims. The chat model still extracts propositions and powers the conversational agent. The workbench shows the provider alongside the classification.
 
-## Follow the application flow
+## Where each piece fits
 
 | Concern | Integration |
 | --- | --- |
-| **Source intake** | [LiveIntake](src/main/java/example/dice/commitments/LiveIntake.java) runs the DICE proposition pipeline over the submitted passage and collects grounded propositions before opening a write transaction. |
-| **Classification** | [CommitmentDecision](src/main/java/example/dice/commitments/CommitmentDecision.java) asks an Embabel `DecisionService` choice question to distinguish commitments, amendments, requests, targets and reminders. |
-| **Authority and audit** | [LiveCaseStore](src/main/java/example/dice/commitments/LiveCaseStore.java) applies the app's authority rules and persists the propositions, decision results and immutable evidence together. Historical reads replay the DICE belief set at the selected transaction time. |
-| **Grounded conversation** | [LiveCommitmentsAgent](src/main/java/example/dice/commitments/LiveCommitmentsAgent.java) uses an Embabel plan and the selected DICE snapshot. The prompt includes the conversation and the supporting record. The app validates citation IDs against that snapshot. |
-| **AG-UI** | [LiveCommitmentsHttp](src/main/java/example/dice/commitments/LiveCommitmentsHttp.java) accepts an AG-UI `RunAgentInput`. The browser consumes the run, state and text events and connects answers to the evidence reader through a citation event. |
+| **Source intake** | DICE uses a commitments-specific prompt to extract propositions from the passage. Model calls finish before the write transaction starts. [LiveIntake](src/main/java/example/dice/commitments/LiveIntake.java) |
+| **Classification** | An Embabel `DecisionService` choice question distinguishes commitments, amendments, requests, targets, and reminders. [CommitmentDecision](src/main/java/example/dice/commitments/CommitmentDecision.java) |
+| **Authority and audit** | The app applies the agreement rules and saves the propositions and source receipt in the same SQLite transaction. Historical reads use the selected transaction time. [LiveCaseStore](src/main/java/example/dice/commitments/LiveCaseStore.java) |
+| **Grounded conversation** | The Embabel agent uses the earlier turns and the selected DICE record. It sends each distinct passage once and checks citation IDs against the same record. [LiveCommitmentsAgent](src/main/java/example/dice/commitments/LiveCommitmentsAgent.java) |
+| **AG-UI** | The endpoint accepts `RunAgentInput` and streams run, state, and text events. A citation event connects answers to the evidence reader. Follow-up runs can reuse the historical snapshot and keep the same point in time. [LiveCommitmentsHttp](src/main/java/example/dice/commitments/LiveCommitmentsHttp.java) · [CommitmentsAgUi](src/main/java/example/dice/commitments/CommitmentsAgUi.java) |
 
-The attestation records the local operator’s review of a signed document. An amendment also needs a selected active commitment and a matching extracted amendment claim. An email carrying a proposed date remains useful evidence without acquiring authority to change the agreement. The application uses one scoped agreement and one local operator. An adopter serving multiple users should derive the agreement scope from access control. Reuse the SQLite file to retain claims and citations across restarts. The browser sends earlier chat turns with each follow-up.
+The model classifies an email asking to move a deadline as a request. That claim gives the agent useful context, and the signed deadline stays in place. The app accepts a signed amendment when the operator attests to reviewing it, selects the active commitment it replaces, and the source yields a matching amendment claim. Signature checking is manual. The receipt keeps the attestation and the selected predecessor alongside the original passage.
 
-DICE canonicalizes identical propositions. The intake result records the model and policy decisions for that receipt. When a new claim matches an existing proposition, the app preserves the original claim’s authority and supersession history.
+DICE keeps one canonical proposition for identical claims. Each distinct submission still has its own receipt and review decisions. Open **Source evidence** to see those decisions after refreshing or reopening the same SQLite file. An earlier record shows only the receipts available at that checkpoint. Submit the same source again and the app returns the saved result without calling either model.
+
+If the conversation and evidence go over the 64,000-character prompt budget, the agent asks you to try an earlier checkpoint or a shorter conversation. This app is scoped to one local agreement workspace, and a record loads its full receipt history.
 
 ## Run the recorded walkthrough
 
@@ -86,6 +88,6 @@ bun run test:browser
 COMMITMENTS_BROWSER_MODE=live bun run test:browser
 ```
 
-The live workflow integration test uses MockMvc and a scripted test-classpath model to exercise the real Embabel agent, DecisionService, DICE and SQLite over AG-UI without opening a port. The live browser test uses the same fixture provider against the running app. It requires no provider keys. The recorded test launches the packaged application. Both require permission to listen on a local port. Set `COMMITMENTS_ARTIFACTS` to an output directory to capture screenshots.
+The live integration test runs the intake, agent, and AG-UI endpoints through MockMvc with a scripted provider and real SQLite. It checks which commitment changes, what survives a restart, and which source the agent cites in an earlier record. The browser suites launch a local server and use recorded replies or the scripted provider, so both run without model keys. Set `COMMITMENTS_ARTIFACTS` to an output directory to capture screenshots.
 
-The application uses the DICE 0.5.0 snapshot and Embabel Agent 1.5.4 from the repositories in [pom.xml](pom.xml).
+The app uses the DICE 0.5.0 snapshot and Embabel Agent 1.5.4. [pom.xml](pom.xml)
