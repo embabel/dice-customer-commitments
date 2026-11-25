@@ -11,6 +11,7 @@ import com.embabel.dice.proposition.Proposition;
 import com.embabel.dice.proposition.PropositionStatus;
 import com.embabel.dice.proposition.extraction.LlmPropositionExtractor;
 import com.embabel.dice.provenance.ConnectorRef;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ import java.util.regex.Pattern;
 import static example.dice.commitments.CaseFile.CONTEXT;
 
 @Service
+@Profile("!live")
 class Commitments {
 
     private static final Pattern DATE = Pattern.compile("\\b(20[0-9]{2}-[0-9]{2}-[0-9]{2})\\b");

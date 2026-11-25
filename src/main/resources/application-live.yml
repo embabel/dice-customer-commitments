@@ -1,0 +1,15 @@
+commitments:
+  model: ${COMMITMENTS_MODEL:gpt-4.1-mini}
+  decision: ${COMMITMENTS_DECISION_MODEL:${commitments.model}}
+
+database:
+  datasources:
+    local:
+      database-name: ${commitments.db:${COMMITMENTS_DB:./data/customer-commitments-live.sqlite}}
+
+embabel:
+  models:
+    default-llm: ${commitments.model}
+    decision:
+      roles:
+        commitment-intake: ${commitments.decision}

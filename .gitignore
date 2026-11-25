@@ -5,3 +5,8 @@
 /test-results/
 /.impeccable/
 .DS_Store
+
+.idea/
+*.iml
+*.ipr
+*.iws

@@ -29,3 +29,13 @@ embabel:
 logging:
   level:
     org.drivine.logger.StatementLogger: "OFF"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!live"
+  autoconfigure:
+    exclude:
+      - com.embabel.agent.autoconfigure.models.openai.AgentOpenAiAutoConfiguration
+      - com.embabel.agent.autoconfigure.models.typesafe.AgentTypeSafeAutoConfiguration
